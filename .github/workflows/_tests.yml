@@ -1,0 +1,51 @@
+name: tests
+on: workflow_call
+
+jobs:
+  run-tests:
+    name: Run tests 🛠️ on multiple systems 🖥️ and Python 🐍 versions
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        include:
+          - os: macos-latest
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.12"
+    env:
+      OS: ${{ matrix.os }}
+      PYTHON: ${{ matrix.python-version }}
+      UV_PYTHON: ${{ matrix.python-version }}
+      UV_NO_MANAGED_PYTHON: True
+      COLUMNS: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+      - name: Install dependencies
+        run: uv sync
+      - name: Cache tox runner
+        uses: actions/cache@v4
+        with:
+          path: .tox
+          key: tox-cache-${{ matrix.os }}-${{ matrix.python-version }}-${{ hashFiles('**/uv.lock') }}
+          restore-keys: |
+            tox-cache-${{ matrix.os }}-${{ matrix.python-version }}-
+      - name: Run tests with tox
+        run: uv run tox -e python${{ matrix.python-version }}
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          env_vars: OS,PYTHON
+          fail_ci_if_error: false
+          files: ./coverage.python${{ matrix.python-version }}.xml
+          flags: ${{ matrix.os }}-python${{ matrix.python-version }}
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
