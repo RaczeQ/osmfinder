@@ -9,43 +9,43 @@ Each region is described by a GeoJSON boundary file.
 from typing import Any, Optional
 from urllib.parse import urljoin, urlparse
 
-import geopandas as gpd
 import requests
 from tqdm import tqdm
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
 from osmfinder._compat import FORCE_TERMINAL
+from osmfinder._typing import OsmExtractsIndex
 from osmfinder.parsers.geojson import parse_geojson_file
 from osmfinder.extract import (
     OpenStreetMapExtract,
     OsmExtractSource,
-    extracts_to_geodataframe,
+    build_index_from_extracts,
     load_index_decorator,
 )
 
 GEO2DAY_BASE_URL = "https://geo2day.com/"
-GEO2DAY_INDEX_GDF: Optional[gpd.GeoDataFrame] = None
+GEO2DAY_INDEX: Optional[OsmExtractsIndex] = None
 
 
 __all__ = ["_get_geo2day_index"]
 
 
-def _get_geo2day_index(**kwargs: Any) -> gpd.GeoDataFrame:
-    global GEO2DAY_INDEX_GDF  # noqa: PLW0603
+def _get_geo2day_index(**kwargs: Any) -> OsmExtractsIndex:
+    global GEO2DAY_INDEX  # noqa: PLW0603
 
-    if GEO2DAY_INDEX_GDF is None:
-        GEO2DAY_INDEX_GDF = _load_geo2day_index(**kwargs)
+    if GEO2DAY_INDEX is None:
+        GEO2DAY_INDEX = _load_geo2day_index(**kwargs)
 
-    return GEO2DAY_INDEX_GDF
+    return GEO2DAY_INDEX
 
 
 @load_index_decorator(OsmExtractSource.geo2day)
-def _load_geo2day_index(**kwargs: Any) -> gpd.GeoDataFrame:  # pragma: no cover
+def _load_geo2day_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cover
     """
     Load available extracts from the GEO2day download service.
 
     Returns:
-        gpd.GeoDataFrame: Extracts index with metadata.
+        OsmExtractsIndex: Extracts index with metadata.
     """
     extracts = []
     with tqdm(disable=FORCE_TERMINAL) as pbar:
@@ -55,9 +55,7 @@ def _load_geo2day_index(**kwargs: Any) -> gpd.GeoDataFrame:  # pragma: no cover
         pbar.set_description(OsmExtractSource.geo2day.value)
         extracts = _parse_geo2day_urls(pbar=pbar, region_objects=region_objects)
 
-    gdf = extracts_to_geodataframe(extracts)
-
-    return gdf
+    return build_index_from_extracts(extracts)
 
 
 def _region_path_segments(url: str) -> list[str]:

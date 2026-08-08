@@ -7,43 +7,43 @@ This module contains wrapper for publically available OpenStreetMap.fr download 
 import re
 from typing import Any, Optional
 
-import geopandas as gpd
 import requests
 from tqdm import tqdm
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
 from osmfinder._compat import FORCE_TERMINAL
+from osmfinder._typing import OsmExtractsIndex
 from osmfinder.parsers.poly import parse_polygon_file
 from osmfinder.extract import (
     OpenStreetMapExtract,
     OsmExtractSource,
-    extracts_to_geodataframe,
+    build_index_from_extracts,
     load_index_decorator,
 )
 
 OPENSTREETMAP_FR_POLYGONS_INDEX_URL = "https://download.openstreetmap.fr/polygons"
 OPENSTREETMAP_FR_EXTRACTS_INDEX_URL = "https://download.openstreetmap.fr/extracts"
-OPENSTREETMAP_FR_INDEX_GDF: Optional[gpd.GeoDataFrame] = None
+OPENSTREETMAP_FR_INDEX: Optional[OsmExtractsIndex] = None
 
 __all__ = ["_get_openstreetmap_fr_index"]
 
 
-def _get_openstreetmap_fr_index(**kwargs: Any) -> gpd.GeoDataFrame:
-    global OPENSTREETMAP_FR_INDEX_GDF  # noqa: PLW0603
+def _get_openstreetmap_fr_index(**kwargs: Any) -> OsmExtractsIndex:
+    global OPENSTREETMAP_FR_INDEX  # noqa: PLW0603
 
-    if OPENSTREETMAP_FR_INDEX_GDF is None:
-        OPENSTREETMAP_FR_INDEX_GDF = _load_openstreetmap_fr_index(**kwargs)
+    if OPENSTREETMAP_FR_INDEX is None:
+        OPENSTREETMAP_FR_INDEX = _load_openstreetmap_fr_index(**kwargs)
 
-    return OPENSTREETMAP_FR_INDEX_GDF
+    return OPENSTREETMAP_FR_INDEX
 
 
 @load_index_decorator(OsmExtractSource.osm_fr)
-def _load_openstreetmap_fr_index(**kwargs: Any) -> gpd.GeoDataFrame:  # pragma: no cover
+def _load_openstreetmap_fr_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cover
     """
     Load available extracts from OpenStreetMap.fr download service.
 
     Returns:
-        gpd.GeoDataFrame: Extracts index with metadata.
+        OsmExtractsIndex: Extracts index with metadata.
     """
     extracts = []
     with tqdm(disable=FORCE_TERMINAL) as pbar:
@@ -55,9 +55,7 @@ def _load_openstreetmap_fr_index(**kwargs: Any) -> gpd.GeoDataFrame:  # pragma: 
             pbar=pbar, extract_soup_objects=extract_soup_objects
         )
 
-    gdf = extracts_to_geodataframe(extracts)
-
-    return gdf
+    return build_index_from_extracts(extracts)
 
 
 def _gather_all_openstreetmap_fr_urls(

@@ -10,14 +10,14 @@ For both, a single GeoJSON file describes all available extracts and their geome
 
 from typing import Any, Optional
 
-import geopandas as gpd
 import requests
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
+from osmfinder._typing import OsmExtractsIndex
 from osmfinder.extract import (
     OpenStreetMapExtract,
     OsmExtractSource,
-    extracts_to_geodataframe,
+    build_index_from_extracts,
     load_index_decorator,
 )
 
@@ -26,61 +26,61 @@ MOVISDA_ADMIN_PBF_BASE_URL = "https://osm.download.movisda.io/admin"
 MOVISDA_GRID_GEOJSON_URL = "https://osm.download.movisda.io/grid/grid-latest.geojson"
 MOVISDA_GRID_PBF_BASE_URL = "https://osm.download.movisda.io/grid"
 
-MOVISDA_ADMIN_INDEX_GDF: Optional[gpd.GeoDataFrame] = None
-MOVISDA_GRID_INDEX_GDF: Optional[gpd.GeoDataFrame] = None
+MOVISDA_ADMIN_INDEX: Optional[OsmExtractsIndex] = None
+MOVISDA_GRID_INDEX: Optional[OsmExtractsIndex] = None
 
 
 __all__ = ["_get_movisda_admin_index", "_get_movisda_grid_index"]
 
 
-def _get_movisda_admin_index(**kwargs: Any) -> gpd.GeoDataFrame:
-    global MOVISDA_ADMIN_INDEX_GDF  # noqa: PLW0603
+def _get_movisda_admin_index(**kwargs: Any) -> OsmExtractsIndex:
+    global MOVISDA_ADMIN_INDEX  # noqa: PLW0603
 
-    if MOVISDA_ADMIN_INDEX_GDF is None:
-        MOVISDA_ADMIN_INDEX_GDF = _load_movisda_admin_index(**kwargs)
+    if MOVISDA_ADMIN_INDEX is None:
+        MOVISDA_ADMIN_INDEX = _load_movisda_admin_index(**kwargs)
 
-    return MOVISDA_ADMIN_INDEX_GDF
+    return MOVISDA_ADMIN_INDEX
 
 
-def _get_movisda_grid_index(**kwargs: Any) -> gpd.GeoDataFrame:
-    global MOVISDA_GRID_INDEX_GDF  # noqa: PLW0603
+def _get_movisda_grid_index(**kwargs: Any) -> OsmExtractsIndex:
+    global MOVISDA_GRID_INDEX  # noqa: PLW0603
 
-    if MOVISDA_GRID_INDEX_GDF is None:
-        MOVISDA_GRID_INDEX_GDF = _load_movisda_grid_index(**kwargs)
+    if MOVISDA_GRID_INDEX is None:
+        MOVISDA_GRID_INDEX = _load_movisda_grid_index(**kwargs)
 
-    return MOVISDA_GRID_INDEX_GDF
+    return MOVISDA_GRID_INDEX
 
 
 @load_index_decorator(OsmExtractSource.movisda_admin)
-def _load_movisda_admin_index(**kwargs: Any) -> gpd.GeoDataFrame:  # pragma: no cover
+def _load_movisda_admin_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cover
     """
     Load available administrative extracts from the Movisda download service.
 
     Returns:
-        gpd.GeoDataFrame: Extracts index with metadata.
+        OsmExtractsIndex: Extracts index with metadata.
     """
     extracts = _iterate_movisda_geojson(
         geojson_url=MOVISDA_ADMIN_GEOJSON_URL,
         pbf_base_url=MOVISDA_ADMIN_PBF_BASE_URL,
         source_enum=OsmExtractSource.movisda_admin,
     )
-    return extracts_to_geodataframe(extracts)
+    return build_index_from_extracts(extracts)
 
 
 @load_index_decorator(OsmExtractSource.movisda_grid)
-def _load_movisda_grid_index(**kwargs: Any) -> gpd.GeoDataFrame:  # pragma: no cover
+def _load_movisda_grid_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cover
     """
     Load available grid extracts from the Movisda download service.
 
     Returns:
-        gpd.GeoDataFrame: Extracts index with metadata.
+        OsmExtractsIndex: Extracts index with metadata.
     """
     extracts = _iterate_movisda_geojson(
         geojson_url=MOVISDA_GRID_GEOJSON_URL,
         pbf_base_url=MOVISDA_GRID_PBF_BASE_URL,
         source_enum=OsmExtractSource.movisda_grid,
     )
-    return extracts_to_geodataframe(extracts)
+    return build_index_from_extracts(extracts)
 
 
 def _iterate_movisda_geojson(

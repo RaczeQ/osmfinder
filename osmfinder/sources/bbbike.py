@@ -6,18 +6,18 @@ This module contains wrapper for publically available BBBike download server.
 
 from typing import Any, Optional
 
-import geopandas as gpd
 import requests
 from shapely import box
 from tqdm import tqdm
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
 from osmfinder._compat import FORCE_TERMINAL
+from osmfinder._typing import OsmExtractsIndex
 from osmfinder.parsers.poly import parse_polygon_file
 from osmfinder.extract import (
     OpenStreetMapExtract,
     OsmExtractSource,
-    extracts_to_geodataframe,
+    build_index_from_extracts,
     load_index_decorator,
 )
 
@@ -25,32 +25,30 @@ BBBIKE_EXTRACTS_INDEX_URL = "https://download.bbbike.org/osm/bbbike"
 BBBIKE_EXTRACTS_CSV_LIST_URL = (
     "https://raw.githubusercontent.com/wosch/bbbike-world/world/etc/cities.csv"
 )
-BBBIKE_INDEX_GDF: Optional[gpd.GeoDataFrame] = None
+BBBIKE_INDEX: Optional[OsmExtractsIndex] = None
 
 __all__ = ["_get_bbbike_index"]
 
 
-def _get_bbbike_index(**kwargs: Any) -> gpd.GeoDataFrame:
-    global BBBIKE_INDEX_GDF  # noqa: PLW0603
+def _get_bbbike_index(**kwargs: Any) -> OsmExtractsIndex:
+    global BBBIKE_INDEX  # noqa: PLW0603
 
-    if BBBIKE_INDEX_GDF is None:
-        BBBIKE_INDEX_GDF = _load_bbbike_index(**kwargs)
+    if BBBIKE_INDEX is None:
+        BBBIKE_INDEX = _load_bbbike_index(**kwargs)
 
-    return BBBIKE_INDEX_GDF
+    return BBBIKE_INDEX
 
 
 @load_index_decorator(OsmExtractSource.bbbike)
-def _load_bbbike_index(**kwargs: Any) -> gpd.GeoDataFrame:  # pragma: no cover
+def _load_bbbike_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cover
     """
     Load available extracts from BBBike download service.
 
     Returns:
-        gpd.GeoDataFrame: Extracts index with metadata.
+        OsmExtractsIndex: Extracts index with metadata.
     """
     extracts = _iterate_bbbike_index()
-    gdf = extracts_to_geodataframe(extracts)
-
-    return gdf
+    return build_index_from_extracts(extracts)
 
 
 def _iterate_bbbike_index() -> list[OpenStreetMapExtract]:  # pragma: no cover

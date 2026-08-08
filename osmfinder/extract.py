@@ -2,12 +2,11 @@
 
 import re
 import warnings
-from dataclasses import asdict, dataclass
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, cast, overload
 
+import numpy as np
 import platformdirs
 from anyascii import anyascii
 from dateutil.relativedelta import relativedelta
@@ -15,54 +14,24 @@ from pooch import HTTPDownloader, retrieve
 from pooch import get_logger as get_pooch_logger
 from requests import HTTPError
 
-from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, WGS84_CRS
+from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS
+from osmfinder._io import read_parquet_index, write_parquet_index
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
 from osmfinder.exceptions import MissingOsmCacheWarning, OldOsmCacheWarning
 
 if TYPE_CHECKING:  # pragma: no cover
-    from geopandas import GeoDataFrame
-    from pandas import DataFrame
     from shapely.geometry.base import BaseGeometry
 
 LFS_DIRECTORY_URL = (
     "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/precalculated_indexes"
 )
 
-
-@dataclass
-class OpenStreetMapExtract:
-    """OSM Extract metadata object."""
-
-    id: str
-    name: str
-    parent: str
-    url: str
-    geometry: "BaseGeometry"
-    file_name: str = ""
-
-
-class OsmExtractSource(str, Enum):
-    """Enum of available OSM extract sources."""
-
-    any = "any"
-    geofabrik = "Geofabrik"
-    osm_fr = "osmfr"
-    bbbike = "BBBike"
-    geo2day = "GEO2Day"
-    movisda_admin = "Movisda-admin"
-    movisda_grid = "Movisda-grid"
-
-    @classmethod
-    def _missing_(cls, value):  # type: ignore
-        value = value.lower()
-        for member in cls:
-            if member.lower() == value:
-                return member
-        return None
+EXPECTED_COLUMNS = ["id", "name", "file_name", "parent", "geometry", "area", "url"]
 
 
 def load_index_decorator(
     extract_source: OsmExtractSource,
-) -> Callable[[Callable[..., "GeoDataFrame"]], Callable[..., "GeoDataFrame"]]:
+) -> Callable[[Callable[..., OsmExtractsIndex]], Callable[..., OsmExtractsIndex]]:
     """
     Decorator for loading OSM extracts index.
 
@@ -71,11 +40,12 @@ def load_index_decorator(
             Used to save the index to cache.
     """
 
-    def inner(function: Callable[..., "GeoDataFrame"]) -> Callable[..., "GeoDataFrame"]:
-        def wrapper(**kwargs: Any) -> "GeoDataFrame":
+    def inner(
+        function: Callable[..., OsmExtractsIndex],
+    ) -> Callable[..., OsmExtractsIndex]:
+        def wrapper(**kwargs: Any) -> OsmExtractsIndex:
             global_cache_file_path = _get_global_cache_file_path(extract_source)
             global_cache_file_path.parent.mkdir(exist_ok=True, parents=True)
-            expected_columns = ["id", "name", "file_name", "parent", "geometry", "area", "url"]
 
             force_recalculation = kwargs.get("force_recalculation", False)
             if force_recalculation:
@@ -86,7 +56,7 @@ def load_index_decorator(
 
             # Check if index exists in cache
             if not force_recalculation and global_cache_file_path.exists():
-                index_gdf = _read_index(global_cache_file_path)
+                index = _read_index(global_cache_file_path)
             # Move locally downloaded cache to global directory
             elif (
                 not force_recalculation
@@ -95,12 +65,12 @@ def load_index_decorator(
                 import shutil
 
                 shutil.copy(local_cache_file_path, global_cache_file_path)
-                index_gdf = _read_index(global_cache_file_path)
+                index = _read_index(global_cache_file_path)
             # Download index
             elif not force_recalculation and _download_precalculated_index_from_github(
                 global_cache_file_path
             ):
-                index_gdf = _read_index(global_cache_file_path)
+                index = _read_index(global_cache_file_path)
             # Calculate index locally
             else:  # pragma: no cover
                 if extract_source != OsmExtractSource.geofabrik:
@@ -113,21 +83,16 @@ def load_index_decorator(
                         stacklevel=0,
                     )
 
-                index_gdf = function()
+                index = function()
                 # fix invalid geometries before computing metrics and persisting the index
-                index_gdf = _ensure_valid_geometries(index_gdf)
+                index = _ensure_valid_geometries(index)
                 # calculate extracts area
-                index_gdf["area"] = index_gdf.geometry.apply(_calculate_geodetic_area)
-                index_gdf.sort_values(by=["area", "id"], ignore_index=True, inplace=True)
-
+                index = _add_areas_to_index(index)
                 # generate full file names
-                apply_function = _get_full_file_name_function(index_gdf)
-                index_gdf["file_name"] = index_gdf["id"].apply(apply_function)
-
-                index_gdf = index_gdf[expected_columns]
+                index = _add_file_names_to_index(index)
 
             # Check if columns are right
-            if set(expected_columns).symmetric_difference(index_gdf.columns):
+            if set(EXPECTED_COLUMNS).symmetric_difference(_index_columns(index)):
                 from osmfinder.exceptions import OsmExtractIndexOutdatedWarning
 
                 warnings.warn(
@@ -138,11 +103,11 @@ def load_index_decorator(
                 # Invalidate previous cached index
                 global_cache_file_path.replace(_invalidated_cache_path(global_cache_file_path))
                 # Download index again
-                index_gdf = wrapper(force_recalculation=force_recalculation)
+                index = wrapper(force_recalculation=force_recalculation)
 
             # Save index to cache
             if force_recalculation or not global_cache_file_path.exists():
-                _write_index(index_gdf[expected_columns], global_cache_file_path)
+                _write_index(index, global_cache_file_path)
 
             global_cache_file_older_than_year = (
                 datetime.now() - relativedelta(years=1)
@@ -157,14 +122,19 @@ def load_index_decorator(
                     stacklevel=0,
                 )
 
-            return index_gdf
+            return index
 
         return wrapper
 
     return inner
 
 
-def _ensure_valid_geometries(index_gdf: "GeoDataFrame") -> "GeoDataFrame":
+def _index_columns(index: OsmExtractsIndex) -> set[str]:
+    """Return the set of column names present in an OsmExtractsIndex."""
+    return {"id", "name", "file_name", "parent", "geometry", "area", "url"}
+
+
+def _ensure_valid_geometries(index: OsmExtractsIndex) -> OsmExtractsIndex:
     """
     Fix topologically invalid geometries in an extracts index.
 
@@ -172,22 +142,70 @@ def _ensure_valid_geometries(index_gdf: "GeoDataFrame") -> "GeoDataFrame":
     These would raise ``GEOSException: TopologyException`` during the coverage
     search (intersection / difference / union).
     """
-    invalid_geometries_mask = ~index_gdf.geometry.is_valid
+    from shapely import is_valid, make_valid
+
+    invalid_geometries_mask = ~is_valid(index.geometries)
     if invalid_geometries_mask.any():
-        index_gdf = index_gdf.copy()
-        index_gdf.loc[invalid_geometries_mask, "geometry"] = index_gdf.geometry[
-            invalid_geometries_mask
-        ].make_valid()
-    return index_gdf
+        fixed_geometries = index.geometries.copy()
+        fixed_geometries[invalid_geometries_mask] = make_valid(
+            index.geometries[invalid_geometries_mask]
+        )
+        return OsmExtractsIndex(
+            ids=index.ids,
+            geometries=fixed_geometries,
+            areas=index.areas,
+            file_names=index.file_names,
+            names=index.names,
+            parents=index.parents,
+            urls=index.urls,
+        )
+    return index
 
 
-def extracts_to_geodataframe(extracts: list[OpenStreetMapExtract]) -> "GeoDataFrame":
-    """Transforms a list of OpenStreetMapExtracts to a GeoDataFrame."""
-    import geopandas as gpd
+def _add_areas_to_index(index: OsmExtractsIndex) -> OsmExtractsIndex:
+    """Calculate and set the geodetic area (in km²) for each extract geometry."""
+    areas = np.array([_calculate_geodetic_area(geometry) for geometry in index.geometries])
+    # Sort by area and id (ascending), mirroring the previous GeoDataFrame behaviour.
+    sort_indices = np.lexsort((index.ids, areas))
+    return OsmExtractsIndex(
+        ids=index.ids[sort_indices],
+        geometries=index.geometries[sort_indices],
+        areas=areas[sort_indices],
+        file_names=index.file_names[sort_indices],
+        names=index.names[sort_indices],
+        parents=index.parents[sort_indices],
+        urls=index.urls[sort_indices],
+    )
 
-    return gpd.GeoDataFrame(
-        data=[asdict(extract) for extract in extracts], geometry="geometry"
-    ).set_crs(WGS84_CRS)
+
+def _add_file_names_to_index(index: OsmExtractsIndex) -> OsmExtractsIndex:
+    """Generate full file names for each extract and set them on the index."""
+    apply_function = _get_full_file_name_function(index)
+    file_names = np.array([apply_function(extract_id) for extract_id in index.ids])
+    return OsmExtractsIndex(
+        ids=index.ids,
+        geometries=index.geometries,
+        areas=index.areas,
+        file_names=file_names,
+        names=index.names,
+        parents=index.parents,
+        urls=index.urls,
+    )
+
+
+def build_index_from_extracts(extracts: list[OpenStreetMapExtract]) -> OsmExtractsIndex:
+    """Transforms a list of OpenStreetMapExtracts to an OsmExtractsIndex."""
+    return OsmExtractsIndex(
+        ids=np.array([extract.id for extract in extracts], dtype=object),
+        geometries=np.array([extract.geometry for extract in extracts], dtype=object),
+        areas=np.array(
+            [_calculate_geodetic_area(extract.geometry) for extract in extracts], dtype=float
+        ),
+        file_names=np.array([extract.file_name for extract in extracts], dtype=object),
+        names=np.array([extract.name for extract in extracts], dtype=object),
+        parents=np.array([extract.parent for extract in extracts], dtype=object),
+        urls=np.array([extract.url for extract in extracts], dtype=object),
+    )
 
 
 @overload
@@ -219,12 +237,12 @@ def clear_osm_index_cache(extract_source: Optional[OsmExtractSource] = None) -> 
 def _get_global_cache_file_path(extract_source: OsmExtractSource) -> Path:
     return (
         Path(platformdirs.user_cache_dir("osmfinder"))
-        / f"{extract_source.value.lower()}_index.fgb.gz"
+        / f"{extract_source.value.lower()}_index.parquet"
     )
 
 
 def _get_local_cache_file_path(extract_source: OsmExtractSource) -> Path:
-    return Path(f"cache/{extract_source.value.lower()}_index.fgb.gz")
+    return Path(f"cache/{extract_source.value.lower()}_index.parquet")
 
 
 def _invalidated_cache_path(path: Path) -> Path:
@@ -232,30 +250,14 @@ def _invalidated_cache_path(path: Path) -> Path:
     return path.with_name(path.name + ".old")
 
 
-def _read_index(path: Path) -> "GeoDataFrame":
-    """
-    Read a gzipped FlatGeobuf extracts index.
-
-    The file is read straight from the gzip container through GDAL's ``/vsigzip/`` virtual
-    filesystem, so it never has to be decompressed to a separate file on disk.
-    """
-    import geopandas as gpd
-
-    return gpd.read_file(f"/vsigzip/{path}")
+def _read_index(path: Path) -> OsmExtractsIndex:
+    """Read a (Geo)Parquet extracts index."""
+    return read_parquet_index(path)
 
 
-def _write_index(index_gdf: "GeoDataFrame", path: Path) -> None:
-    """Write an extracts index as a gzip-compressed FlatGeobuf file."""
-    import gzip
-    import shutil
-    import tempfile
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_fgb = Path(tmp_dir) / "index.fgb"
-        index_gdf.to_file(tmp_fgb, driver="FlatGeobuf")
-        with open(tmp_fgb, "rb") as source, gzip.open(path, "wb", compresslevel=9) as destination:
-            shutil.copyfileobj(source, destination)
+def _write_index(index: OsmExtractsIndex, path: Path) -> None:
+    """Write an extracts index as a (Geo)Parquet file."""
+    write_parquet_index(index, path)
 
 
 def _download_precalculated_index_from_github(destination_path: Path) -> bool:
@@ -302,10 +304,8 @@ def _slugify_file_name_part(value: str) -> str:
     return re.sub(r"[^a-z0-9_-]+", "", ascii_value)
 
 
-def _get_full_file_name_function(index: "DataFrame") -> Callable[[str], str]:
-    from pandas import Index
-
-    ids_index = Index(index["id"])
+def _get_full_file_name_function(index: OsmExtractsIndex) -> Callable[[str], str]:
+    ids_index = {extract_id: i for i, extract_id in enumerate(index.ids)}
 
     def inner_function(id: str) -> str:
         current_id = id
@@ -315,9 +315,9 @@ def _get_full_file_name_function(index: "DataFrame") -> Callable[[str], str]:
                 parts.append(_slugify_file_name_part(current_id))
                 break
             else:
-                matching_row = index.iloc[ids_index.get_loc(current_id)]
-                parts.append(_slugify_file_name_part(matching_row["name"]))
-                current_id = matching_row["parent"]
+                matching_row_idx = ids_index[current_id]
+                parts.append(_slugify_file_name_part(index.names[matching_row_idx]))
+                current_id = index.parents[matching_row_idx]
 
         return "_".join(parts[::-1])
 

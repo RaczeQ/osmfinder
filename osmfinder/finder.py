@@ -12,19 +12,20 @@ from functools import partial
 from math import ceil
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Union, overload
+from typing import Optional, Union, cast, overload
 
-import geopandas as gpd
+import numpy as np
 from pooch import HTTPDownloader, retrieve
 from pooch import get_logger as get_pooch_logger
 from requests.exceptions import RequestException
 from rich import get_console
 from rich import print as rprint
-from osmfinder._compat import GEOPANDAS_NEW_API
+from shapely import equals_exact, intersects, is_empty, unary_union
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 from tqdm.contrib.concurrent import process_map
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS
+from osmfinder._typing import OsmExtractsIndex
 from osmfinder.exceptions import (
     GeometryNotCoveredError,
     GeometryNotCoveredWarning,
@@ -48,9 +49,6 @@ from osmfinder.sources.geo2day import _get_geo2day_index
 from osmfinder.sources.geofabrik import _get_geofabrik_index
 from osmfinder.sources.movisda import _get_movisda_admin_index, _get_movisda_grid_index
 from osmfinder.sources.osm_fr import _get_openstreetmap_fr_index
-
-if TYPE_CHECKING:  # pragma: no cover
-    import pandas as pd
 
 __all__ = [
     "download_extracts_pbf_files",
@@ -206,7 +204,7 @@ def _resolve_extract_sources(source: OsmExtractSourceLike) -> list[OsmExtractSou
     return list(set(resolved))
 
 
-def _get_index_for_sources(source: OsmExtractSourceLike) -> gpd.GeoDataFrame:
+def _get_index_for_sources(source: OsmExtractSourceLike) -> OsmExtractsIndex:
     """
     Load and combine extract indexes for one or multiple sources.
 
@@ -220,8 +218,8 @@ def _get_index_for_sources(source: OsmExtractSourceLike) -> gpd.GeoDataFrame:
     if len(resolved_sources) == 1:
         return OSM_EXTRACT_SOURCE_INDEX_FUNCTION[resolved_sources[0]]()
 
-    loaded_indexes = []
-    unavailable_sources = []
+    loaded_indexes: list[OsmExtractsIndex] = []
+    unavailable_sources: list[OsmExtractSource] = []
     for resolved_source in resolved_sources:
         try:
             loaded_indexes.append(OSM_EXTRACT_SOURCE_INDEX_FUNCTION[resolved_source]())
@@ -244,12 +242,10 @@ def _get_index_for_sources(source: OsmExtractSourceLike) -> gpd.GeoDataFrame:
             " Check your internet connection or the local cache."
         )
 
-    combined_index = gpd.pd.concat(loaded_indexes)
-    combined_index.sort_values(by=["area", "id"], ignore_index=True, inplace=True)
-    return combined_index
+    return OsmExtractsIndex.combine_indexes(loaded_indexes)
 
 
-def _get_combined_index() -> gpd.GeoDataFrame:
+def _get_combined_index() -> OsmExtractsIndex:
     return _get_index_for_sources(OsmExtractSource.any)
 
 
@@ -307,29 +303,39 @@ def get_extract_by_query(
         index = _get_index_for_sources(source)
 
         if excluded_extracts_ids:
-            index = index[~index["id"].isin(excluded_extracts_ids)]
+            index = index.filter_by_mask(~np.isin(index.ids, list(excluded_extracts_ids)))
 
-        matching_index_row: pd.Series = None
+        query_lower = query.lower().strip()
+        query_lower_spaces = query_lower.replace("_", " ")
 
-        file_name_matched_rows = (index["file_name"].str.lower() == query.lower().strip()) | (
-            index["file_name"].str.replace("_", " ").str.lower()
-            == query.lower().replace("_", " ").strip()
+        file_names_lower = np.char.lower(index.file_names)
+        file_names_lower_spaces = np.char.replace(file_names_lower, "_", " ")
+        names_lower = np.char.lower(index.names)
+        names_lower_spaces = np.char.replace(names_lower, "_", " ")
+
+        file_name_matched_rows = (file_names_lower == query_lower) | (
+            file_names_lower_spaces == query_lower_spaces
         )
-        extract_name_matched_rows = (index["name"].str.lower() == query.lower().strip()) | (
-            index["name"].str.replace("_", " ").str.lower()
-            == query.lower().replace("_", " ").strip()
+        extract_name_matched_rows = (names_lower == query_lower) | (
+            names_lower_spaces == query_lower_spaces
         )
+
+        matching_index_row: Optional[OpenStreetMapExtract] = None
 
         # full file name matched
-        if sum(file_name_matched_rows) == 1:
-            matching_index_row = index[file_name_matched_rows].iloc[0]
+        if np.count_nonzero(file_name_matched_rows) == 1:
+            matching_index_row = index.get_extract_by_index(
+                int(np.flatnonzero(file_name_matched_rows)[0])
+            )
         # single name matched
-        elif sum(extract_name_matched_rows) == 1:
-            matching_index_row = index[extract_name_matched_rows].iloc[0]
+        elif np.count_nonzero(extract_name_matched_rows) == 1:
+            matching_index_row = index.get_extract_by_index(
+                int(np.flatnonzero(extract_name_matched_rows)[0])
+            )
         # multiple names matched
         elif extract_name_matched_rows.any():
-            matching_rows = index[extract_name_matched_rows]
-            matching_full_names = sorted(matching_rows["file_name"])
+            matching_rows = index.filter_by_mask(extract_name_matched_rows)
+            matching_full_names = sorted(matching_rows.file_names)
             full_names = ", ".join(f'"{full_name}"' for full_name in matching_full_names)
 
             if not select_first_match:
@@ -339,11 +345,12 @@ def get_extract_by_query(
                     matching_full_names=matching_full_names,
                 )
 
-            matching_index_row = matching_rows.sort_values(by=["area", "id"]).iloc[0]
+            # Select the smallest-area match (index is already sorted by area, then id).
+            matching_index_row = matching_rows.get_extract_by_index(0)
             warnings.warn(
                 f'Multiple extracts matched by query "{query.strip()}"'
                 f" (matching full names: {full_names})."
-                f' Selected "{matching_index_row["file_name"]}".'
+                f' Selected "{matching_index_row.file_name}".'
                 " Use the full name as a query or set `select_first_match=False`"
                 " to control this behaviour.",
                 OsmExtractMultipleMatchesWarning,
@@ -351,16 +358,16 @@ def get_extract_by_query(
             )
         # zero names matched
         elif not extract_name_matched_rows.any():
-            matching_full_names = []
+            matching_full_names: list[str] = []
+            unique_names_lower = np.unique(names_lower)
             suggested_query_names = difflib.get_close_matches(
-                query.lower(), index["name"].str.lower().unique(), n=5, cutoff=0.7
+                query_lower, unique_names_lower, n=5, cutoff=0.7
             )
 
             if suggested_query_names:
                 for suggested_query_name in suggested_query_names:
-                    found_extracts = index[index["name"].str.lower() == suggested_query_name]
-                    matching_full_names.extend(found_extracts["file_name"])
-                full_names = ", ".join(matching_full_names)
+                    found_extracts = index.filter_by_mask(names_lower == suggested_query_name)
+                    matching_full_names.extend(found_extracts.file_names)
                 full_names = ", ".join(f'"{full_name}"' for full_name in matching_full_names)
                 exception_message = (
                     f'Zero extracts matched by query "{query}".\n'
@@ -377,14 +384,7 @@ def get_extract_by_query(
                 matching_full_names=matching_full_names,
             )
 
-        return OpenStreetMapExtract(
-            id=matching_index_row["id"],
-            name=matching_index_row["name"],
-            parent=matching_index_row["parent"],
-            url=matching_index_row["url"],
-            geometry=matching_index_row["geometry"],
-            file_name=matching_index_row["file_name"],
-        )
+        return cast("OpenStreetMapExtract", matching_index_row)
 
     except ValueError as ex:
         raise ValueError(f"Unknown OSM extracts source: {source}.") from ex
@@ -619,7 +619,7 @@ def find_smallest_containing_extracts_total(
     """
     return _find_smallest_containing_extracts(
         geometry=geometry,
-        polygons_index_gdf=_get_combined_index(),
+        polygons_index=_get_combined_index(),
         geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
         allow_uncovered_geometry=allow_uncovered_geometry,
         excluded_extracts_ids=excluded_extracts_ids,
@@ -658,7 +658,7 @@ def find_smallest_containing_geofabrik_extracts(
     """
     return _find_smallest_containing_extracts(
         geometry=geometry,
-        polygons_index_gdf=OSM_EXTRACT_SOURCE_INDEX_FUNCTION[OsmExtractSource.geofabrik](),
+        polygons_index=OSM_EXTRACT_SOURCE_INDEX_FUNCTION[OsmExtractSource.geofabrik](),
         geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
         allow_uncovered_geometry=allow_uncovered_geometry,
         excluded_extracts_ids=excluded_extracts_ids,
@@ -697,7 +697,7 @@ def find_smallest_containing_openstreetmap_fr_extracts(
     """
     return _find_smallest_containing_extracts(
         geometry=geometry,
-        polygons_index_gdf=OSM_EXTRACT_SOURCE_INDEX_FUNCTION[OsmExtractSource.osm_fr](),
+        polygons_index=OSM_EXTRACT_SOURCE_INDEX_FUNCTION[OsmExtractSource.osm_fr](),
         geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
         allow_uncovered_geometry=allow_uncovered_geometry,
         excluded_extracts_ids=excluded_extracts_ids,
@@ -736,7 +736,7 @@ def find_smallest_containing_bbbike_extracts(
     """
     return _find_smallest_containing_extracts(
         geometry=geometry,
-        polygons_index_gdf=OSM_EXTRACT_SOURCE_INDEX_FUNCTION[OsmExtractSource.bbbike](),
+        polygons_index=OSM_EXTRACT_SOURCE_INDEX_FUNCTION[OsmExtractSource.bbbike](),
         geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
         allow_uncovered_geometry=allow_uncovered_geometry,
         excluded_extracts_ids=excluded_extracts_ids,
@@ -784,7 +784,7 @@ def find_smallest_containing_extracts(
 
     return _find_smallest_containing_extracts(
         geometry=geometry,
-        polygons_index_gdf=index,
+        polygons_index=index,
         geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
         allow_uncovered_geometry=allow_uncovered_geometry,
         excluded_extracts_ids=excluded_extracts_ids,
@@ -793,7 +793,7 @@ def find_smallest_containing_extracts(
 
 def _find_smallest_containing_extracts(
     geometry: Union[BaseGeometry, BaseMultipartGeometry],
-    polygons_index_gdf: gpd.GeoDataFrame,
+    polygons_index: OsmExtractsIndex,
     num_of_multiprocessing_workers: int = -1,
     multiprocessing_activation_threshold: Optional[int] = None,
     geometry_coverage_iou_threshold: float = 0.01,
@@ -814,7 +814,7 @@ def _find_smallest_containing_extracts(
 
     Args:
         geometry (Union[BaseGeometry, BaseMultipartGeometry]): Geometry to be covered.
-        polygons_index_gdf (gpd.GeoDataFrame): Index of available extracts.
+        polygons_index (OsmExtractsIndex): Index of available extracts.
         num_of_multiprocessing_workers (int, optional): Number of workers used for multiprocessing.
             Defaults to -1 which results in a total number of available cpu threads.
             `0` and `1` values disable multiprocessing.
@@ -836,9 +836,9 @@ def _find_smallest_containing_extracts(
         List[OpenStreetMapExtract]: List of extracts covering a given geometry.
     """
     if excluded_extracts_ids:
-        polygons_index_gdf = polygons_index_gdf.loc[
-            ~polygons_index_gdf["id"].isin(excluded_extracts_ids)
-        ]
+        polygons_index = polygons_index.filter_by_mask(
+            ~np.isin(polygons_index.ids, list(excluded_extracts_ids))
+        )
 
     if num_of_multiprocessing_workers == 0:
         num_of_multiprocessing_workers = 1
@@ -860,7 +860,7 @@ def _find_smallest_containing_extracts(
     ):
         find_extracts_func = partial(
             _find_smallest_containing_extracts_for_single_geometry,
-            polygons_index_gdf=polygons_index_gdf,
+            polygons_index=polygons_index,
             geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
             allow_uncovered_geometry=allow_uncovered_geometry,
         )
@@ -879,7 +879,7 @@ def _find_smallest_containing_extracts(
             unique_extracts_ids.update(
                 _find_smallest_containing_extracts_for_single_geometry(
                     geometry=sub_geometry,
-                    polygons_index_gdf=polygons_index_gdf,
+                    polygons_index=polygons_index,
                     geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
                     allow_uncovered_geometry=allow_uncovered_geometry,
                 )
@@ -888,7 +888,7 @@ def _find_smallest_containing_extracts(
     extracts_filtered = _filter_extracts(
         geometry,
         unique_extracts_ids,
-        polygons_index_gdf,
+        polygons_index,
         num_of_multiprocessing_workers,
         multiprocessing_activation_threshold,
     )
@@ -898,7 +898,7 @@ def _find_smallest_containing_extracts(
 
 def _find_smallest_containing_extracts_for_single_geometry(
     geometry: BaseGeometry,
-    polygons_index_gdf: gpd.GeoDataFrame,
+    polygons_index: OsmExtractsIndex,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
 ) -> set[str]:
@@ -911,7 +911,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
 
     Args:
         geometry (BaseGeometry): Geometry to be covered.
-        polygons_index_gdf (gpd.GeoDataFrame): Index of available extracts.
+        polygons_index (OsmExtractsIndex): Index of available extracts.
         geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union metric
             for selecting the matching OSM extracts. Is best matching extract has value lower than
             the threshold, it is discarded (except the first one). Has to be in range between
@@ -928,7 +928,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
     Returns:
         Set[str]: Selected extract index string values.
     """
-    if polygons_index_gdf is None:
+    if polygons_index is None:
         raise RuntimeError("Extracts index is empty.")
 
     if geometry_coverage_iou_threshold < 0 or geometry_coverage_iou_threshold > 1:
@@ -936,7 +936,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
 
     checked_extracts_ids, iou_metric_values = _cover_geometry_with_extracts(
         geometry=geometry,
-        polygons_index_gdf=polygons_index_gdf,
+        polygons_index=polygons_index,
         allow_uncovered_geometry=allow_uncovered_geometry,
     )
 
@@ -945,7 +945,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
         if iou_metric_value >= geometry_coverage_iou_threshold or not selected_extracts_ids:
             selected_extracts_ids.add(extract_id)
         else:
-            skipped_extract = polygons_index_gdf[polygons_index_gdf.id == extract_id].iloc[0]
+            skipped_extract = _get_extract_by_id(polygons_index, extract_id)
             warnings.warn(
                 (
                     "Skipping extract because of low IoU value "
@@ -958,9 +958,15 @@ def _find_smallest_containing_extracts_for_single_geometry(
     return selected_extracts_ids
 
 
+def _get_extract_by_id(index: OsmExtractsIndex, extract_id: str) -> OpenStreetMapExtract:
+    """Return the extract with the given id from the index."""
+    matching_indices = np.flatnonzero(index.ids == extract_id)
+    return index.get_extract_by_index(int(matching_indices[0]))
+
+
 def _cover_geometry_with_extracts(
     geometry: BaseGeometry,
-    polygons_index_gdf: gpd.GeoDataFrame,
+    polygons_index: OsmExtractsIndex,
     allow_uncovered_geometry: bool = False,
 ) -> tuple[list[str], list[float]]:
     """
@@ -968,7 +974,7 @@ def _cover_geometry_with_extracts(
 
     Args:
         geometry (BaseGeometry): Geometry to be covered.
-        polygons_index_gdf (gpd.GeoDataFrame): Index of available extracts.
+        polygons_index (OsmExtractsIndex): Index of available extracts.
         allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
             by any OSM extract. Defaults to `False`.
 
@@ -980,31 +986,40 @@ def _cover_geometry_with_extracts(
         tuple[list[str], list[float]]: List of extracts index string values with a list
             of IoU metric values.
     """
-    if polygons_index_gdf is None:
+    if polygons_index is None:
         raise RuntimeError("Extracts index is empty.")
 
     checked_extracts_ids: list[str] = []
     iou_metric_values: list[float] = []
 
     if geometry.geom_type == "Polygon":
-        geometry_to_cover = geometry.buffer(0)
+        geometry_to_cover = cast("BaseGeometry", geometry.buffer(0))
     else:
-        geometry_to_cover = geometry.buffer(1e-6)
+        geometry_to_cover = cast("BaseGeometry", geometry.buffer(1e-6))
 
-    exactly_matching_geometry = polygons_index_gdf.loc[
-        polygons_index_gdf.geometry.geom_equals_exact(geometry, tolerance=1e-6)
-    ]
-    if len(exactly_matching_geometry) == 1:
-        checked_extracts_ids.append(exactly_matching_geometry.iloc[0].id)
+    exactly_matching_mask = np.array(
+        [
+            equals_exact(extract_geometry, geometry, tolerance=1e-6)
+            for extract_geometry in polygons_index.geometries
+        ]
+    )
+    if np.count_nonzero(exactly_matching_mask) == 1:
+        matching_idx = int(np.flatnonzero(exactly_matching_mask)[0])
+        checked_extracts_ids.append(str(polygons_index.ids[matching_idx]))
         iou_metric_values.append(1.0)
         return checked_extracts_ids, iou_metric_values
 
-    while not geometry_to_cover.is_empty:
-        matching_rows = polygons_index_gdf.loc[
-            (~polygons_index_gdf["id"].isin(checked_extracts_ids))
-            & (polygons_index_gdf.intersects(geometry_to_cover))
+    while not is_empty(geometry_to_cover):
+        # Find candidate extracts that intersect the remaining geometry.
+        candidate_indices = polygons_index.tree.query(geometry_to_cover)
+        candidate_indices = [
+            idx
+            for idx in candidate_indices
+            if str(polygons_index.ids[idx]) not in checked_extracts_ids
+            and intersects(cast("BaseGeometry", polygons_index.geometries[idx]), geometry_to_cover)
         ]
-        if not len(matching_rows):
+
+        if not candidate_indices:
             if not allow_uncovered_geometry:
                 raise GeometryNotCoveredError(
                     "Couldn't find extracts covering given geometry."
@@ -1019,19 +1034,29 @@ def _cover_geometry_with_extracts(
             )
             break
 
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            geometry_intersection_area = matching_rows.geometry.intersection(geometry_to_cover).area
-            matching_rows["iou_metric"] = geometry_intersection_area / (
-                matching_rows.geometry.area + geometry_to_cover.area - geometry_intersection_area
-            )
+        # Compute IoU for each candidate.
+        candidate_areas = polygons_index.areas[candidate_indices]
+        candidate_geometries = [
+            cast("BaseGeometry", polygons_index.geometries[idx]) for idx in candidate_indices
+        ]
+        intersection_areas = np.array(
+            [
+                extract_geometry.intersection(geometry_to_cover).area
+                for extract_geometry in candidate_geometries
+            ]
+        )
+        iou_values = intersection_areas / (
+            candidate_areas + geometry_to_cover.area - intersection_areas
+        )
 
-        best_matching_extract = matching_rows.sort_values(
-            by=["iou_metric", "area"], ascending=[False, True]
-        ).iloc[0]
-        geometry_to_cover = geometry_to_cover.difference(best_matching_extract.geometry)
-        checked_extracts_ids.append(best_matching_extract.id)
-        iou_metric_values.append(best_matching_extract.iou_metric)
+        # Select the best matching extract (highest IoU, then smallest area).
+        best_candidate_pos = int(np.lexsort((candidate_areas, -iou_values))[0])
+        best_idx = candidate_indices[best_candidate_pos]
+        best_iou = iou_values[best_candidate_pos]
+
+        geometry_to_cover = geometry_to_cover.difference(candidate_geometries[best_candidate_pos])
+        checked_extracts_ids.append(str(polygons_index.ids[best_idx]))
+        iou_metric_values.append(float(best_iou))
 
     return checked_extracts_ids, iou_metric_values
 
@@ -1039,7 +1064,7 @@ def _cover_geometry_with_extracts(
 def _filter_extracts(
     geometry: BaseGeometry,
     extracts_ids: Iterable[str],
-    polygons_index_gdf: gpd.GeoDataFrame,
+    polygons_index: OsmExtractsIndex,
     num_of_multiprocessing_workers: int,
     multiprocessing_activation_threshold: int,
 ) -> list[OpenStreetMapExtract]:
@@ -1049,7 +1074,7 @@ def _filter_extracts(
     Args:
         geometry (Union[BaseGeometry, BaseMultipartGeometry]): Geometry to be covered.
         extracts_ids (Iterable[str]): Group of selected extracts indexes.
-        polygons_index_gdf (gpd.GeoDataFrame): Index of available extracts.
+        polygons_index (OsmExtractsIndex): Index of available extracts.
         num_of_multiprocessing_workers (int): Number of workers used for multiprocessing.
             Similar to `n_jobs` parameter from `scikit-learn` library.
         multiprocessing_activation_threshold (int): Number of gometries required to start
@@ -1061,12 +1086,22 @@ def _filter_extracts(
     Returns:
         List[OpenStreetMapExtract]: Filtered list of extracts.
     """
-    if polygons_index_gdf is None:
+    if polygons_index is None:
         raise RuntimeError("Extracts index is empty.")
 
-    sorted_extracts_gdf = polygons_index_gdf.loc[
-        polygons_index_gdf["id"].isin(extracts_ids)
-    ].sort_values(by=["area", "id"], ignore_index=True, ascending=False)
+    matching_mask = np.isin(polygons_index.ids, list(extracts_ids))
+    sorted_extracts = polygons_index.filter_by_mask(matching_mask)
+    # Sort by area descending, then id ascending (mirrors the previous GeoDataFrame behaviour).
+    sort_indices = np.lexsort((sorted_extracts.ids, -sorted_extracts.areas))
+    sorted_extracts = OsmExtractsIndex(
+        ids=sorted_extracts.ids[sort_indices],
+        geometries=sorted_extracts.geometries[sort_indices],
+        areas=sorted_extracts.areas[sort_indices],
+        file_names=sorted_extracts.file_names[sort_indices],
+        names=sorted_extracts.names[sort_indices],
+        parents=sorted_extracts.parents[sort_indices],
+        urls=sorted_extracts.urls[sort_indices],
+    )
 
     filtered_extracts: list[OpenStreetMapExtract] = []
     filtered_extracts_ids: set[str] = set()
@@ -1081,7 +1116,7 @@ def _filter_extracts(
     ):
         filter_extracts_func = partial(
             _filter_extracts_for_single_geometry,
-            sorted_extracts_gdf=sorted_extracts_gdf,
+            sorted_extracts=sorted_extracts,
         )
 
         for extract_ids_list in process_map(
@@ -1096,31 +1131,21 @@ def _filter_extracts(
     else:
         for sub_geometry in geometries:
             filtered_extracts_ids.update(
-                _filter_extracts_for_single_geometry(sub_geometry, sorted_extracts_gdf)
+                _filter_extracts_for_single_geometry(sub_geometry, sorted_extracts)
             )
 
     simplified_extracts_ids = _simplify_selected_extracts(
-        filtered_extracts_ids, sorted_extracts_gdf
+        filtered_extracts_ids, sorted_extracts
     )
 
-    for extract_row in sorted_extracts_gdf.loc[
-        sorted_extracts_gdf["id"].isin(simplified_extracts_ids)
-    ].to_dict(orient="records"):
-        extract = OpenStreetMapExtract(
-            id=extract_row["id"],
-            name=extract_row["name"],
-            parent=extract_row["parent"],
-            url=extract_row["url"],
-            geometry=extract_row["geometry"],
-            file_name=extract_row["file_name"],
-        )
-        filtered_extracts.append(extract)
+    for extract_id in simplified_extracts_ids:
+        filtered_extracts.append(_get_extract_by_id(sorted_extracts, extract_id))
 
     return filtered_extracts
 
 
 def _filter_extracts_for_single_geometry(
-    geometry: BaseGeometry, sorted_extracts_gdf: gpd.GeoDataFrame
+    geometry: BaseGeometry, sorted_extracts: OsmExtractsIndex
 ) -> set[str]:
     """
     Filter a set of extracts to include least overlaps in it for a single geometry.
@@ -1130,7 +1155,7 @@ def _filter_extracts_for_single_geometry(
 
     Args:
         geometry (BaseGeometry): Geometry to be covered.
-        sorted_extracts_gdf (gpd.GeoDataFrame): Sorted index of available extracts.
+        sorted_extracts (OsmExtractsIndex): Sorted index of available extracts.
 
     Returns:
         Set[str]: Selected extract index string values.
@@ -1142,45 +1167,37 @@ def _filter_extracts_for_single_geometry(
     else:
         geometry_to_cover = geometry.buffer(1e-6)
 
-    for _, extract_row in sorted_extracts_gdf.iterrows():
-        if geometry_to_cover.is_empty:
+    for idx in range(len(sorted_extracts.ids)):
+        if is_empty(geometry_to_cover):
             break
 
-        if extract_row.geometry.disjoint(geometry_to_cover):
+        extract_geometry = sorted_extracts.geometries[idx]
+        if extract_geometry.disjoint(geometry_to_cover):
             continue
 
-        geometry_to_cover = geometry_to_cover.difference(extract_row.geometry)
-        filtered_extracts_ids.add(extract_row.id)
+        geometry_to_cover = geometry_to_cover.difference(extract_geometry)
+        filtered_extracts_ids.add(str(sorted_extracts.ids[idx]))
 
     return filtered_extracts_ids
 
 
 def _simplify_selected_extracts(
-    filtered_extracts_ids: set[str], sorted_extracts_gdf: gpd.GeoDataFrame
+    filtered_extracts_ids: set[str], sorted_extracts: OsmExtractsIndex
 ) -> set[str]:
     simplified_extracts_ids: set[str] = filtered_extracts_ids.copy()
 
-    matching_extracts = sorted_extracts_gdf.loc[
-        sorted_extracts_gdf["id"].isin(simplified_extracts_ids)
-    ]
+    matching_mask = np.isin(sorted_extracts.ids, list(simplified_extracts_ids))
+    matching_indices = np.flatnonzero(matching_mask)
 
     simplify_again = True
     while simplify_again:
         simplify_again = False
         extract_to_remove = None
         for extract_id in simplified_extracts_ids:
-            extract_geometry = (
-                matching_extracts.loc[sorted_extracts_gdf["id"] == extract_id].iloc[0].geometry
-            )
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=FutureWarning)
-                other_geometries_gdf = matching_extracts.loc[
-                    sorted_extracts_gdf["id"] != extract_id
-                ]
-                if GEOPANDAS_NEW_API:
-                    other_geometries = other_geometries_gdf.union_all()
-                else:
-                    other_geometries = other_geometries_gdf.unary_union
+            extract_idx = int(np.flatnonzero(sorted_extracts.ids == extract_id)[0])
+            extract_geometry = sorted_extracts.geometries[extract_idx]
+            other_indices = [idx for idx in matching_indices if idx != extract_idx]
+            other_geometries = unary_union(sorted_extracts.geometries[other_indices])
             if extract_geometry.covered_by(other_geometries):
                 extract_to_remove = extract_id
                 simplify_again = True
