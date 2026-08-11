@@ -19,18 +19,28 @@ def _index_from_records(records: list[dict[str, Any]]) -> OsmExtractsIndex:
 
     Unlike ``OsmExtractsIndex.from_extracts``, the ``area`` and ``file_name``
     values provided in the records are preserved verbatim (they are not
-    recalculated from the geometry / parent hierarchy).
+    recalculated from the geometry / parent hierarchy). The index is still
+    sorted by area then id to match production behaviour.
     """
+    ids = np.array([record["id"] for record in records], dtype=object)
+    geometries = np.array([record["geometry"] for record in records], dtype=object)
+    areas = np.array([record.get("area", 0.0) for record in records])
+    file_names = np.array(
+        [record.get("file_name", record["id"]) for record in records], dtype=object
+    )
+    names = np.array([record["name"] for record in records], dtype=object)
+    parents = np.array([record["parent"] for record in records], dtype=object)
+    urls = np.array([record["url"] for record in records], dtype=object)
+
+    sort_indices = np.lexsort((ids, areas))
     return OsmExtractsIndex(
-        ids=np.array([record["id"] for record in records], dtype=object),
-        geometries=np.array([record["geometry"] for record in records], dtype=object),
-        areas=np.array([record.get("area", 0.0) for record in records]),
-        file_names=np.array(
-            [record.get("file_name", record["id"]) for record in records], dtype=object
-        ),
-        names=np.array([record["name"] for record in records], dtype=object),
-        parents=np.array([record["parent"] for record in records], dtype=object),
-        urls=np.array([record["url"] for record in records], dtype=object),
+        ids=ids[sort_indices],
+        geometries=geometries[sort_indices],
+        areas=areas[sort_indices],
+        file_names=file_names[sort_indices],
+        names=names[sort_indices],
+        parents=parents[sort_indices],
+        urls=urls[sort_indices],
     )
 
 

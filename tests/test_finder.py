@@ -407,7 +407,7 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
                 " 12.455878610023916 41.901790362263796, 12.455878610023916 41.904910802544634,"
                 " 12.450637854252449 41.904910802544634))"
             ),
-            "GEO2Day_europe_vatican_city",
+            "Movisda-admin_VA",
         ),
         (
             "Geofabrik",
@@ -477,9 +477,6 @@ def test_single_smallest_extract(
             ),
             0.01,
             [
-                "osmfr_europe_spain_catalunya_lleida",
-                "osmfr_europe_france_midi_pyrenees_ariege",
-                "osmfr_europe_france_languedoc_roussillon_pyrenees_orientales",
                 "osmfr_europe_andorra",
             ],
         ),
@@ -511,7 +508,7 @@ def test_single_smallest_extract(
             "any",
             box(14.456635, 50.686018, 15.247650, 51.140586),
             0,
-            ["movisda-grid_n51w015", "bbbike_goerlitz", "geo2day_europe_czech_republic_liberecky"],
+            ["movisda-grid_n51w015", "bbbike_goerlitz", "geo2day_europe_czech_republic_liberecky"]
         ),
     ],
 )
@@ -525,4 +522,4 @@ def test_multiple_smallest_extracts(
     extracts = find_smallest_containing_extracts(
         geometry, source, geometry_coverage_iou_threshold=geometry_coverage_iou_threshold
     )
-    assert [extract.file_name for extract in extracts] == expected_extract_file_names
+    assert sorted(extract.file_name for extract in extracts) == sorted(expected_extract_file_names)

@@ -14,13 +14,11 @@ from requests import HTTPError
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS
 from osmfinder._io import read_parquet_index, write_parquet_index
 from osmfinder._typing import OsmExtractSource, OsmExtractsIndex
-from osmfinder.exceptions import MissingOsmCacheWarning, OldOsmCacheWarning
+from osmfinder.exceptions import MissingOsmCacheWarning, OldOsmCacheWarning, OsmExtractIndexCorruptedError, OsmExtractIndexOutdatedWarning
 
 LFS_DIRECTORY_URL = (
     "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/precalculated_indexes"
 )
-
-EXPECTED_COLUMNS = ["id", "name", "file_name", "parent", "geometry", "area", "url"]
 
 
 def load_index_decorator(
@@ -48,9 +46,26 @@ def load_index_decorator(
                     stacklevel=0,
                 )
 
+            def _invalidate_outdated_cache() -> OsmExtractsIndex:
+                warnings.warn(
+                    "Existing cached index has outdated structure. New index will be redownloaded.",
+                    OsmExtractIndexOutdatedWarning,
+                    stacklevel=0,
+                )
+                global_cache_file_path.replace(_invalidated_cache_path(global_cache_file_path))
+                return wrapper(force_recalculation=force_recalculation)
+
+            def _read_index_from_file() -> OsmExtractsIndex:
+                try:
+                    index = read_parquet_index(global_cache_file_path)
+                except OsmExtractIndexCorruptedError:
+                    index = _invalidate_outdated_cache()
+
+                return index
+
             # Check if index exists in cache
             if not force_recalculation and global_cache_file_path.exists():
-                index = _read_index(global_cache_file_path)
+                index = _read_index_from_file()
             # Move locally downloaded cache to global directory
             elif (
                 not force_recalculation
@@ -59,12 +74,12 @@ def load_index_decorator(
                 import shutil
 
                 shutil.copy(local_cache_file_path, global_cache_file_path)
-                index = _read_index(global_cache_file_path)
+                index = _read_index_from_file()
             # Download index
             elif not force_recalculation and _download_precalculated_index_from_github(
                 global_cache_file_path
             ):
-                index = _read_index(global_cache_file_path)
+                index = _read_index_from_file()
             # Calculate index locally
             else:  # pragma: no cover
                 if extract_source != OsmExtractSource.geofabrik:
@@ -79,23 +94,9 @@ def load_index_decorator(
 
                 index = function()
 
-            # Check if columns are right
-            if set(EXPECTED_COLUMNS).symmetric_difference(_index_columns(index)):
-                from osmfinder.exceptions import OsmExtractIndexOutdatedWarning
-
-                warnings.warn(
-                    "Existing cached index has outdated structure. New index will be redownloaded.",
-                    OsmExtractIndexOutdatedWarning,
-                    stacklevel=0,
-                )
-                # Invalidate previous cached index
-                global_cache_file_path.replace(_invalidated_cache_path(global_cache_file_path))
-                # Download index again
-                index = wrapper(force_recalculation=force_recalculation)
-
             # Save index to cache
             if force_recalculation or not global_cache_file_path.exists():
-                _write_index(index, global_cache_file_path)
+                write_parquet_index(index, global_cache_file_path)
 
             global_cache_file_older_than_year = (
                 datetime.now() - relativedelta(years=1)
@@ -115,11 +116,6 @@ def load_index_decorator(
         return wrapper
 
     return inner
-
-
-def _index_columns(index: OsmExtractsIndex) -> set[str]:
-    """Return the set of column names present in an OsmExtractsIndex."""
-    return {"id", "name", "file_name", "parent", "geometry", "area", "url"}
 
 
 @overload
@@ -162,16 +158,6 @@ def _get_local_cache_file_path(extract_source: OsmExtractSource) -> Path:
 def _invalidated_cache_path(path: Path) -> Path:
     """Return the path used to park an invalidated/outdated cache file (appends `.old`)."""
     return path.with_name(path.name + ".old")
-
-
-def _read_index(path: Path) -> OsmExtractsIndex:
-    """Read a (Geo)Parquet extracts index."""
-    return read_parquet_index(path)
-
-
-def _write_index(index: OsmExtractsIndex, path: Path) -> None:
-    """Write an extracts index as a (Geo)Parquet file."""
-    write_parquet_index(index, path)
 
 
 def _download_precalculated_index_from_github(destination_path: Path) -> bool:

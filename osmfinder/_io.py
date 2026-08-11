@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from osmfinder._typing import OsmExtractsIndex
+from osmfinder.exceptions import OsmExtractIndexCorruptedError
 
 from arro3.core import Array, Table
 from arro3.io import read_parquet, write_parquet
@@ -12,6 +13,7 @@ from shapely import from_wkb, to_wkb
 
 GEOPARQUET_VERSION = "1.1.0"
 GEOPARQUET_CRS = {"type": "OGC", "id": 4326}
+EXPECTED_COLUMNS = ["id", "name", "file_name", "parent", "geometry", "area", "url"]
 
 
 def read_parquet_index(file_paths: Path | Sequence[Path]) -> OsmExtractsIndex:
@@ -28,6 +30,12 @@ def read_parquet_index(file_paths: Path | Sequence[Path]) -> OsmExtractsIndex:
 
 def _read_single_index_file(file_path: Path) -> dict[str, np.ndarray]:
     tbl_raw = read_parquet(file_path).read_all()
+
+    missing_columns = [col for col in EXPECTED_COLUMNS if col not in tbl_raw.column_names]
+    if missing_columns:
+        raise OsmExtractIndexCorruptedError(
+            f"Index file {file_path.name} is missing required columns: {missing_columns}"
+        )
 
     np_tbl = {
         col_name: np.asarray(col_data)

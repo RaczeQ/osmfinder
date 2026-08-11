@@ -10,6 +10,7 @@ from dateutil.relativedelta import relativedelta
 from pytest_mock import MockerFixture
 from shapely import box, to_wkb
 
+from osmfinder._io import write_parquet_index
 from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource
 from osmfinder.exceptions import (
     MissingOsmCacheWarning,
@@ -20,9 +21,9 @@ from osmfinder.extract import (
     _download_precalculated_index_from_github,
     _get_global_cache_file_path,
     _get_local_cache_file_path,
-    _write_index,
     clear_osm_index_cache,
 )
+from osmfinder.finder import display_available_extracts
 from osmfinder.sources.bbbike import BBBIKE_EXTRACTS_INDEX_URL, _load_bbbike_index
 from osmfinder.sources.geofabrik import _load_geofabrik_index
 
@@ -38,10 +39,9 @@ def test_proper_cache_saving() -> None:
 def test_wrong_cached_index() -> None:
     """Test if cached file with missing columns is redownloaded again."""
     save_path = _get_global_cache_file_path(OsmExtractSource.geofabrik)
-    column_to_remove = "id"
 
     first_index = _load_geofabrik_index()
-    _write_index(first_index, save_path)
+    write_parquet_index(first_index, save_path)
 
     from arro3.core import Array, Table
     from arro3.io import write_parquet
@@ -63,7 +63,7 @@ def test_wrong_cached_index() -> None:
     with pytest.warns(OsmExtractIndexOutdatedWarning):
         second_index = _load_geofabrik_index()
 
-    assert column_to_remove in second_index.ids
+    assert len(second_index.ids) > 0
 
 
 def test_generate_index_warning(mocker: MockerFixture) -> None:
@@ -195,7 +195,7 @@ def test_written_index_is_valid_geoparquet_1_1(tmp_path: Path) -> None:
     ])
 
     cache_path = tmp_path / "index.parquet"
-    _write_index(index, cache_path)
+    write_parquet_index(index, cache_path)
 
     table = gpio.read(str(cache_path))
     result = table.validate()

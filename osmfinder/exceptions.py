@@ -45,6 +45,10 @@ class MissingOsmCacheWarning(Warning): ...
 class OldOsmCacheWarning(Warning): ...
 
 
+class OsmExtractIndexCorruptedError(Exception):
+    """Raised when a cached index file is corrupted or has an invalid structure."""
+
+
 __all__ = [
     "GeometryNotCoveredError",
     "GeometryNotCoveredWarning",

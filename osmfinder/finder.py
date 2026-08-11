@@ -307,9 +307,13 @@ def get_extract_by_query(
         file_names = index.file_names.astype(str)
         names = index.names.astype(str)
         file_names_lower = np.char.lower(file_names)
-        file_names_lower_spaces = np.char.replace(file_names_lower, "_", " ")
         names_lower = np.char.lower(names)
-        names_lower_spaces = np.char.replace(names_lower, "_", " ")
+        if file_names.size > 0:
+            file_names_lower_spaces = np.char.replace(file_names_lower, "_", " ")
+            names_lower_spaces = np.char.replace(names_lower, "_", " ")
+        else:
+            file_names_lower_spaces = file_names_lower
+            names_lower_spaces = names_lower
 
         file_name_matched_rows = (file_names_lower == query_lower) | (
             file_names_lower_spaces == query_lower_spaces

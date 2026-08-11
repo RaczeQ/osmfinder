@@ -9,6 +9,7 @@ from shapely import box
 
 from osmfinder._typing import OpenStreetMapExtract
 from osmfinder.exceptions import (
+    OsmExtractMultipleMatchesWarning,
     OsmExtractUnavailableWarning,
     OsmExtractsUnavailableError,
     OsmExtractZeroMatchesError,
@@ -29,7 +30,6 @@ def test_find_and_download_excludes_unavailable_extracts(mocker: MockerFixture) 
     from rq_geo_toolkit.geocode import geocode_to_geometry
 
     geometry = geocode_to_geometry("Andorra")
-    matching_extracts = find_and_download_extracts_pbf_files.__wrapped__  # type: ignore[attr-defined]
     # Use the finder directly to avoid downloading.
     from osmfinder.finder import find_smallest_containing_extracts
 
@@ -118,8 +118,10 @@ def test_download_extract_by_query_redundancy(mocker: MockerFixture) -> None:
 
     mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
 
-    with tempfile.TemporaryDirectory() as tmp_dir, pytest.warns(OsmExtractUnavailableWarning):
-        path = download_extract_by_query("Vatican City", download_directory=tmp_dir)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        with pytest.warns(OsmExtractMultipleMatchesWarning):
+            with pytest.warns(OsmExtractUnavailableWarning):
+                path = download_extract_by_query("Vatican City", download_directory=tmp_dir)
     # Fell back to the second match.
     assert path.name == "geo2day_vatican_city.osm.pbf"
 
