@@ -12,7 +12,7 @@ from functools import partial
 from math import ceil
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Optional, Union, cast, overload
+from typing import cast, overload
 
 import numpy as np
 from pooch import HTTPDownloader, retrieve
@@ -24,8 +24,9 @@ from shapely import equals_exact, intersects, is_empty, unary_union
 from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 from tqdm.contrib.concurrent import process_map
 
+from osmfinder._compat import FORCE_TERMINAL
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.exceptions import (
     GeometryNotCoveredError,
     GeometryNotCoveredWarning,
@@ -37,14 +38,13 @@ from osmfinder.exceptions import (
     OsmExtractUnavailableWarning,
     OsmExtractZeroMatchesError,
 )
-from osmfinder._compat import FORCE_TERMINAL
-from osmfinder.sources.bbbike import _get_bbbike_index
 from osmfinder.extract import clear_osm_index_cache
-from osmfinder.sources.tree import get_available_extracts_as_rich_tree
+from osmfinder.sources.bbbike import _get_bbbike_index
 from osmfinder.sources.geo2day import _get_geo2day_index
 from osmfinder.sources.geofabrik import _get_geofabrik_index
 from osmfinder.sources.movisda import _get_movisda_admin_index, _get_movisda_grid_index
 from osmfinder.sources.osm_fr import _get_openstreetmap_fr_index
+from osmfinder.sources.tree import get_available_extracts_as_rich_tree
 
 __all__ = [
     "download_extracts_pbf_files",
@@ -150,7 +150,7 @@ OSM_EXTRACT_SOURCE_INDEX_FUNCTION = {
 }
 
 # A single source, or multiple sources passed as an iterable or a comma-separated string.
-OsmExtractSourceLike = Union[OsmExtractSource, str, Iterable[Union[OsmExtractSource, str]]]
+OsmExtractSourceLike = OsmExtractSource | str | Iterable[OsmExtractSource | str]
 
 
 def _resolve_extract_sources(source: OsmExtractSourceLike) -> list[OsmExtractSource]:
@@ -172,7 +172,7 @@ def _resolve_extract_sources(source: OsmExtractSourceLike) -> list[OsmExtractSou
         list[OsmExtractSource]: List of concrete sources (without `any`).
     """
     if isinstance(source, OsmExtractSource):
-        raw_values: list[Union[OsmExtractSource, str]] = [source]
+        raw_values: list[OsmExtractSource | str] = [source]
     elif isinstance(source, str):
         raw_values = source.split(",")
     else:
@@ -258,7 +258,7 @@ def get_extract_by_query(
     query: str,
     *,
     select_first_match: bool = ...,
-    excluded_extracts_ids: Optional[set[str]] = ...,
+    excluded_extracts_ids: set[str] | None = ...,
 ) -> OpenStreetMapExtract: ...
 
 
@@ -267,7 +267,7 @@ def get_extract_by_query(
     query: str,
     source: OsmExtractSourceLike,
     select_first_match: bool = ...,
-    excluded_extracts_ids: Optional[set[str]] = ...,
+    excluded_extracts_ids: set[str] | None = ...,
 ) -> OpenStreetMapExtract: ...
 
 
@@ -275,7 +275,7 @@ def get_extract_by_query(
     query: str,
     source: OsmExtractSourceLike = "any",
     select_first_match: bool = True,
-    excluded_extracts_ids: Optional[set[str]] = None,
+    excluded_extracts_ids: set[str] | None = None,
 ) -> OpenStreetMapExtract:
     """
     Find an OSM extract by name.
@@ -322,7 +322,7 @@ def get_extract_by_query(
             names_lower_spaces == query_lower_spaces
         )
 
-        matching_index_row: Optional[OpenStreetMapExtract] = None
+        matching_index_row: OpenStreetMapExtract | None = None
 
         # full file name matched
         if np.count_nonzero(file_name_matched_rows) == 1:
@@ -360,7 +360,7 @@ def get_extract_by_query(
             )
         # zero names matched
         elif not extract_name_matched_rows.any():
-            matching_full_names: list[str] = []
+            matching_full_names = []
             unique_names_lower = np.unique(names_lower)
             suggested_query_names = difflib.get_close_matches(
                 query_lower, unique_names_lower, n=5, cutoff=0.7
@@ -396,7 +396,7 @@ def get_extract_by_query(
 def download_extract_by_query(
     query: str,
     *,
-    download_directory: Union[str, Path] = "files",
+    download_directory: str | Path = "files",
     progressbar: bool = True,
     select_first_match: bool = True,
 ) -> Path: ...
@@ -407,7 +407,7 @@ def download_extract_by_query(
     query: str,
     source: OsmExtractSourceLike,
     *,
-    download_directory: Union[str, Path] = "files",
+    download_directory: str | Path = "files",
     progressbar: bool = True,
     select_first_match: bool = True,
 ) -> Path: ...
@@ -416,7 +416,7 @@ def download_extract_by_query(
 def download_extract_by_query(
     query: str,
     source: OsmExtractSourceLike = "any",
-    download_directory: Union[str, Path] = "files",
+    download_directory: str | Path = "files",
     progressbar: bool = True,
     select_first_match: bool = True,
 ) -> Path:
@@ -484,9 +484,9 @@ def download_extract_by_query(
 
 
 def find_and_download_extracts_pbf_files(
-    geometry: Union[BaseGeometry, BaseMultipartGeometry],
+    geometry: BaseGeometry | BaseMultipartGeometry,
     source: OsmExtractSourceLike,
-    download_directory: Union[str, Path],
+    download_directory: str | Path,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
     progressbar: bool = True,
@@ -555,7 +555,7 @@ def find_and_download_extracts_pbf_files(
 
 
 def display_available_extracts(
-    source: Union[OsmExtractSource, str],
+    source: OsmExtractSource | str,
     use_full_names: bool = True,
     use_pager: bool = False,
 ) -> None:
@@ -590,10 +590,10 @@ def display_available_extracts(
 
 
 def find_smallest_containing_extracts_total(
-    geometry: Union[BaseGeometry, BaseMultipartGeometry],
+    geometry: BaseGeometry | BaseMultipartGeometry,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
-    excluded_extracts_ids: Optional[set[str]] = None,
+    excluded_extracts_ids: set[str] | None = None,
 ) -> list[OpenStreetMapExtract]:
     """
     Find smallest extracts from all OSM extract indexes that contains given polygon.
@@ -629,10 +629,10 @@ def find_smallest_containing_extracts_total(
 
 
 def find_smallest_containing_geofabrik_extracts(
-    geometry: Union[BaseGeometry, BaseMultipartGeometry],
+    geometry: BaseGeometry | BaseMultipartGeometry,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
-    excluded_extracts_ids: Optional[set[str]] = None,
+    excluded_extracts_ids: set[str] | None = None,
 ) -> list[OpenStreetMapExtract]:
     """
     Find smallest extracts from Geofabrik that contains given geometry.
@@ -668,10 +668,10 @@ def find_smallest_containing_geofabrik_extracts(
 
 
 def find_smallest_containing_openstreetmap_fr_extracts(
-    geometry: Union[BaseGeometry, BaseMultipartGeometry],
+    geometry: BaseGeometry | BaseMultipartGeometry,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
-    excluded_extracts_ids: Optional[set[str]] = None,
+    excluded_extracts_ids: set[str] | None = None,
 ) -> list[OpenStreetMapExtract]:
     """
     Find smallest extracts from OpenStreetMap.fr that contains given polygon.
@@ -707,10 +707,10 @@ def find_smallest_containing_openstreetmap_fr_extracts(
 
 
 def find_smallest_containing_bbbike_extracts(
-    geometry: Union[BaseGeometry, BaseMultipartGeometry],
+    geometry: BaseGeometry | BaseMultipartGeometry,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
-    excluded_extracts_ids: Optional[set[str]] = None,
+    excluded_extracts_ids: set[str] | None = None,
 ) -> list[OpenStreetMapExtract]:
     """
     Find smallest extracts from BBBike that contains given polygon.
@@ -746,11 +746,11 @@ def find_smallest_containing_bbbike_extracts(
 
 
 def find_smallest_containing_extracts(
-    geometry: Union[BaseGeometry, BaseMultipartGeometry],
+    geometry: BaseGeometry | BaseMultipartGeometry,
     source: OsmExtractSourceLike,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
-    excluded_extracts_ids: Optional[set[str]] = None,
+    excluded_extracts_ids: set[str] | None = None,
 ) -> list[OpenStreetMapExtract]:
     """
     Find smallest extracts from a given OSM source that contains given polygon.
@@ -794,13 +794,13 @@ def find_smallest_containing_extracts(
 
 
 def _find_smallest_containing_extracts(
-    geometry: Union[BaseGeometry, BaseMultipartGeometry],
+    geometry: BaseGeometry | BaseMultipartGeometry,
     polygons_index: OsmExtractsIndex,
     num_of_multiprocessing_workers: int = -1,
-    multiprocessing_activation_threshold: Optional[int] = None,
+    multiprocessing_activation_threshold: int | None = None,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
-    excluded_extracts_ids: Optional[set[str]] = None,
+    excluded_extracts_ids: set[str] | None = None,
 ) -> list[OpenStreetMapExtract]:
     """
     Find smallest set of extracts covering a given geometry.
@@ -943,7 +943,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
     )
 
     selected_extracts_ids: set[str] = set()
-    for extract_id, iou_metric_value in zip(checked_extracts_ids, iou_metric_values):
+    for extract_id, iou_metric_value in zip(checked_extracts_ids, iou_metric_values, strict=True):
         if iou_metric_value >= geometry_coverage_iou_threshold or not selected_extracts_ids:
             selected_extracts_ids.add(extract_id)
         else:
@@ -1136,9 +1136,7 @@ def _filter_extracts(
                 _filter_extracts_for_single_geometry(sub_geometry, sorted_extracts)
             )
 
-    simplified_extracts_ids = _simplify_selected_extracts(
-        filtered_extracts_ids, sorted_extracts
-    )
+    simplified_extracts_ids = _simplify_selected_extracts(filtered_extracts_ids, sorted_extracts)
 
     for extract_id in simplified_extracts_ids:
         filtered_extracts.append(_get_extract_by_id(sorted_extracts, extract_id))

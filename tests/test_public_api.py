@@ -64,9 +64,7 @@ def test_smoke_end_to_end_query_flow(monkeypatch: pytest.MonkeyPatch, fake_index
     assert extract.file_name == "big_small"
 
     # Geometry query.
-    results = osmfinder.find_smallest_containing_extracts(
-        fake_index.geometries[1], source="any"
-    )
+    results = osmfinder.find_smallest_containing_extracts(fake_index.geometries[1], source="any")
     assert {extract.file_name for extract in results} == {"big_small"}
 
 
@@ -77,9 +75,7 @@ def test_fuzzy_source_name_parsing() -> None:
 
     for _ in range(50):
         name = rng.choice(valid_names)
-        mangled = "".join(
-            char.upper() if rng.random() < 0.5 else char.lower() for char in name
-        )
+        mangled = "".join(char.upper() if rng.random() < 0.5 else char.lower() for char in name)
         if rng.random() < 0.3:
             mangled = f"  {mangled}  "
         assert OsmExtractSource(mangled.strip()) == OsmExtractSource(name)
@@ -111,9 +107,7 @@ def test_fuzzy_extract_name_queries(monkeypatch: pytest.MonkeyPatch, fake_index)
     monkeypatch.setattr(finder, "_get_index_for_sources", lambda *args: fake_index)
 
     for _ in range(50):
-        query = "".join(
-            rng.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(rng.randint(1, 8))
-        )
+        query = "".join(rng.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(rng.randint(1, 8)))
         try:
             extract = osmfinder.get_extract_by_query(query, select_first_match=False)
         except (OsmExtractZeroMatchesError, OsmExtractMultipleMatchesError):

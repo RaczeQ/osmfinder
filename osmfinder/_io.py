@@ -3,13 +3,12 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
-
-from osmfinder._typing import OsmExtractsIndex
-from osmfinder.exceptions import OsmExtractIndexCorruptedError
-
 from arro3.core import Array, Table
 from arro3.io import read_parquet, write_parquet
 from shapely import from_wkb, to_wkb
+
+from osmfinder._typing import OsmExtractsIndex
+from osmfinder.exceptions import OsmExtractIndexCorruptedError
 
 GEOPARQUET_VERSION = "1.1.0"
 GEOPARQUET_CRS = {"type": "OGC", "id": 4326}

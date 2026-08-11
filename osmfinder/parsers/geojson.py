@@ -12,7 +12,6 @@ if TYPE_CHECKING:  # pragma: no cover
 __all__ = ["parse_geojson_file"]
 
 
-
 def parse_geojson_file(geojson_url: str) -> Optional["BaseGeometry"]:  # pragma: no cover
     """
     Parse a GeoJSON file from URL into a single geometry describing the region extent.

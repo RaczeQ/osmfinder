@@ -26,7 +26,6 @@ from osmfinder.finder import (
     find_smallest_containing_extracts_total,
     get_extract_by_query,
 )
-
 from tests._helpers import _index_from_extracts, _index_from_records
 
 
@@ -233,11 +232,28 @@ def test_select_first_match(mocker: MockerFixture) -> None:
     """Test if select_first_match picks the smallest-area match with a warning."""
     import warnings
 
-    index = _index_from_extracts([
-        {"id": "geo2day_x_vatican_city", "name": "Vatican City", "parent": "a", "geometry": box(0, 0, 2, 2)},
-        {"id": "osmfr_x_vatican_city", "name": "Vatican City", "parent": "b", "geometry": box(0, 0, 1, 1)},
-        {"id": "Geofabrik_enfield", "name": "enfield", "parent": "c", "geometry": box(0, 0, 10, 10)},
-    ])
+    index = _index_from_extracts(
+        [
+            {
+                "id": "geo2day_x_vatican_city",
+                "name": "Vatican City",
+                "parent": "a",
+                "geometry": box(0, 0, 2, 2),
+            },
+            {
+                "id": "osmfr_x_vatican_city",
+                "name": "Vatican City",
+                "parent": "b",
+                "geometry": box(0, 0, 1, 1),
+            },
+            {
+                "id": "Geofabrik_enfield",
+                "name": "enfield",
+                "parent": "c",
+                "geometry": box(0, 0, 10, 10),
+            },
+        ]
+    )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
 
     # Default (True): selects the smallest-area match (osmfr, box 0,0,1,1) and warns.
@@ -403,7 +419,8 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
         (
             "any",
             from_wkt(
-                "POLYGON ((12.450637854252449 41.904910802544634, 12.450637854252449 41.901790362263796,"
+                "POLYGON ((12.450637854252449 41.904910802544634,"
+                " 12.450637854252449 41.901790362263796,"
                 " 12.455878610023916 41.901790362263796, 12.455878610023916 41.904910802544634,"
                 " 12.450637854252449 41.904910802544634))"
             ),
@@ -412,7 +429,8 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
         (
             "Geofabrik",
             from_wkt(
-                "POLYGON ((12.450637854252449 41.904910802544634, 12.450637854252449 41.901790362263796,"
+                "POLYGON ((12.450637854252449 41.904910802544634,"
+                " 12.450637854252449 41.901790362263796,"
                 " 12.455878610023916 41.901790362263796, 12.455878610023916 41.904910802544634,"
                 " 12.450637854252449 41.904910802544634))"
             ),
@@ -421,7 +439,8 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
         (
             "any",
             from_wkt(
-                "POLYGON ((-0.1514787822171684 51.49843445562462, -0.1514787822171684 51.48926140694954,"
+                "POLYGON ((-0.1514787822171684 51.49843445562462,"
+                " -0.1514787822171684 51.48926140694954,"
                 " -0.1293785532031677 51.48926140694954, -0.1293785532031677 51.49843445562462,"
                 " -0.1514787822171684 51.49843445562462))"
             ),
@@ -430,7 +449,8 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
         (
             "BBBike",
             from_wkt(
-                "POLYGON ((-0.1514787822171684 51.49843445562462, -0.1514787822171684 51.48926140694954,"
+                "POLYGON ((-0.1514787822171684 51.49843445562462,"
+                " -0.1514787822171684 51.48926140694954,"
                 " -0.1293785532031677 51.48926140694954, -0.1293785532031677 51.49843445562462,"
                 " -0.1514787822171684 51.49843445562462))"
             ),
@@ -439,7 +459,8 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
         (
             "any",
             from_wkt(
-                "POLYGON ((-123.15817514738828 49.29493379142323, -123.15817514738828 49.23700029433431,"
+                "POLYGON ((-123.15817514738828 49.29493379142323,"
+                " -123.15817514738828 49.23700029433431,"
                 " -123.07449492760279 49.23700029433431, -123.07449492760279 49.29493379142323,"
                 " -123.15817514738828 49.29493379142323))"
             ),
@@ -448,7 +469,8 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
         (
             "osmfr",
             from_wkt(
-                "POLYGON ((-123.15817514738828 49.29493379142323, -123.15817514738828 49.23700029433431,"
+                "POLYGON ((-123.15817514738828 49.29493379142323,"
+                " -123.15817514738828 49.23700029433431,"
                 " -123.07449492760279 49.23700029433431, -123.07449492760279 49.29493379142323,"
                 " -123.15817514738828 49.29493379142323))"
             ),
@@ -456,9 +478,7 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
         ),
     ],
 )
-def test_single_smallest_extract(
-    source: str, geometry: Any, expected_extract_id: str
-) -> None:
+def test_single_smallest_extract(source: str, geometry: Any, expected_extract_id: str) -> None:
     """Test if extracts matching works correctly for geometries within borders."""
     extracts = find_smallest_containing_extracts(geometry, source)
     assert len(extracts) == 1
@@ -471,7 +491,8 @@ def test_single_smallest_extract(
         (
             "osmfr",
             from_wkt(
-                "POLYGON ((1.382599544073372 42.67676873293743, 1.382599544073372 42.40065303248514,"
+                "POLYGON ((1.382599544073372 42.67676873293743,"
+                " 1.382599544073372 42.40065303248514,"
                 " 1.8092269635579328 42.40065303248514, 1.8092269635579328 42.67676873293743,"
                 " 1.382599544073372 42.67676873293743))"
             ),
@@ -483,7 +504,8 @@ def test_single_smallest_extract(
         (
             "any",
             from_wkt(
-                "POLYGON ((1.382599544073372 42.67676873293743, 1.382599544073372 42.40065303248514,"
+                "POLYGON ((1.382599544073372 42.67676873293743,"
+                " 1.382599544073372 42.40065303248514,"
                 " 1.8092269635579328 42.40065303248514, 1.8092269635579328 42.67676873293743,"
                 " 1.382599544073372 42.67676873293743))"
             ),
@@ -508,7 +530,7 @@ def test_single_smallest_extract(
             "any",
             box(14.456635, 50.686018, 15.247650, 51.140586),
             0,
-            ["movisda-grid_n51w015", "bbbike_goerlitz", "geo2day_europe_czech_republic_liberecky"]
+            ["movisda-grid_n51w015", "bbbike_goerlitz", "geo2day_europe_czech_republic_liberecky"],
         ),
     ],
 )

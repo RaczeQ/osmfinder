@@ -10,7 +10,6 @@ from shapely import box
 from osmfinder._typing import OsmExtractSource
 from osmfinder.finder import display_available_extracts
 from osmfinder.sources.tree import get_available_extracts_as_rich_tree
-
 from tests._helpers import _index_from_records
 
 
@@ -72,12 +71,46 @@ def _render_rich_tree(tree: Any) -> str:
 
 def test_extracts_tree_structure_and_loose_parents() -> None:
     """Test if the tree nests children under parents and attaches loose parents."""
-    index = _index_from_records([
-        {"id": "BBBike_a", "name": "a", "file_name": "bbbike_a", "parent": "BBBike", "area": 2.0, "url": "http://x/a", "geometry": box(0, 0, 1, 1)},
-        {"id": "BBBike_a_x", "name": "x", "file_name": "bbbike_a_x", "parent": "BBBike_a", "area": 1.0, "url": "http://x/x", "geometry": box(0, 0, 1, 1)},
-        {"id": "BBBike_b", "name": "b", "file_name": "bbbike_b", "parent": "BBBike", "area": 3.0, "url": "http://x/b", "geometry": box(0, 0, 1, 1)},
-        {"id": "BBBike_orphan", "name": "orphan", "file_name": "bbbike_orphan", "parent": "BBBike_missing", "area": 1.0, "url": "http://x/o", "geometry": box(0, 0, 1, 1)},
-    ])
+    index = _index_from_records(
+        [
+            {
+                "id": "BBBike_a",
+                "name": "a",
+                "file_name": "bbbike_a",
+                "parent": "BBBike",
+                "area": 2.0,
+                "url": "http://x/a",
+                "geometry": box(0, 0, 1, 1),
+            },
+            {
+                "id": "BBBike_a_x",
+                "name": "x",
+                "file_name": "bbbike_a_x",
+                "parent": "BBBike_a",
+                "area": 1.0,
+                "url": "http://x/x",
+                "geometry": box(0, 0, 1, 1),
+            },
+            {
+                "id": "BBBike_b",
+                "name": "b",
+                "file_name": "bbbike_b",
+                "parent": "BBBike",
+                "area": 3.0,
+                "url": "http://x/b",
+                "geometry": box(0, 0, 1, 1),
+            },
+            {
+                "id": "BBBike_orphan",
+                "name": "orphan",
+                "file_name": "bbbike_orphan",
+                "parent": "BBBike_missing",
+                "area": 1.0,
+                "url": "http://x/o",
+                "geometry": box(0, 0, 1, 1),
+            },
+        ]
+    )
 
     tree = get_available_extracts_as_rich_tree(
         OsmExtractSource.bbbike, {OsmExtractSource.bbbike: lambda: index}, use_full_names=True

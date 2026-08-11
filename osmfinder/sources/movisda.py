@@ -8,12 +8,12 @@ and a regular geographic grid (`Movisda-grid`).
 For both, a single GeoJSON file describes all available extracts and their geometries.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import requests
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.extract import load_index_decorator
 
 MOVISDA_ADMIN_GEOJSON_URL = "https://osm.download.movisda.io/admin/Admin-latest.geojson"
@@ -21,8 +21,8 @@ MOVISDA_ADMIN_PBF_BASE_URL = "https://osm.download.movisda.io/admin"
 MOVISDA_GRID_GEOJSON_URL = "https://osm.download.movisda.io/grid/grid-latest.geojson"
 MOVISDA_GRID_PBF_BASE_URL = "https://osm.download.movisda.io/grid"
 
-MOVISDA_ADMIN_INDEX: Optional[OsmExtractsIndex] = None
-MOVISDA_GRID_INDEX: Optional[OsmExtractsIndex] = None
+MOVISDA_ADMIN_INDEX: OsmExtractsIndex | None = None
+MOVISDA_GRID_INDEX: OsmExtractsIndex | None = None
 
 
 __all__ = ["_get_movisda_admin_index", "_get_movisda_grid_index"]

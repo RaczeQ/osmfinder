@@ -4,23 +4,23 @@ BBBike OpenStreetMap extracts.
 This module contains wrapper for publically available BBBike download server.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 import requests
 from shapely import box
 from tqdm import tqdm
 
-from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
 from osmfinder._compat import FORCE_TERMINAL
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
-from osmfinder.parsers.poly import parse_polygon_file
+from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.extract import load_index_decorator
+from osmfinder.parsers.poly import parse_polygon_file
 
 BBBIKE_EXTRACTS_INDEX_URL = "https://download.bbbike.org/osm/bbbike"
 BBBIKE_EXTRACTS_CSV_LIST_URL = (
     "https://raw.githubusercontent.com/wosch/bbbike-world/world/etc/cities.csv"
 )
-BBBIKE_INDEX: Optional[OsmExtractsIndex] = None
+BBBIKE_INDEX: OsmExtractsIndex | None = None
 
 __all__ = ["_get_bbbike_index"]
 

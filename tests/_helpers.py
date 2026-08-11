@@ -1,4 +1,5 @@
-"""Shared helper functions for the osmfinder test suite.
+"""
+Shared helper functions for the osmfinder test suite.
 
 These helpers build :class:`OsmExtractsIndex` instances from simple dict
 records.  They are kept in a regular importable module (rather than
@@ -15,7 +16,8 @@ from osmfinder._typing import OsmExtractsIndex
 
 
 def _index_from_records(records: list[dict[str, Any]]) -> OsmExtractsIndex:
-    """Build an :class:`OsmExtractsIndex` from a list of record dicts.
+    """
+    Build an :class:`OsmExtractsIndex` from a list of record dicts.
 
     Unlike ``OsmExtractsIndex.from_extracts``, the ``area`` and ``file_name``
     values provided in the records are preserved verbatim (they are not
@@ -45,7 +47,8 @@ def _index_from_records(records: list[dict[str, Any]]) -> OsmExtractsIndex:
 
 
 def _index_from_extracts(records: list[dict[str, Any]]) -> OsmExtractsIndex:
-    """Build an :class:`OsmExtractsIndex` via ``from_extracts``.
+    """
+    Build an :class:`OsmExtractsIndex` via ``from_extracts``.
 
     This path recalculates ``area`` and ``file_name`` from the geometry and
     parent hierarchy, and repairs invalid geometries (mirrors production

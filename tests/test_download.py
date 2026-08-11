@@ -10,8 +10,8 @@ from shapely import box
 from osmfinder._typing import OpenStreetMapExtract
 from osmfinder.exceptions import (
     OsmExtractMultipleMatchesWarning,
-    OsmExtractUnavailableWarning,
     OsmExtractsUnavailableError,
+    OsmExtractUnavailableWarning,
     OsmExtractZeroMatchesError,
 )
 from osmfinder.finder import (
@@ -19,14 +19,12 @@ from osmfinder.finder import (
     download_extracts_pbf_files,
     find_and_download_extracts_pbf_files,
 )
-
 from tests._helpers import _index_from_records
 
 
 def test_find_and_download_excludes_unavailable_extracts(mocker: MockerFixture) -> None:
     """Test if unavailable extracts are excluded and the coverage is recalculated."""
     from requests.exceptions import HTTPError
-
     from rq_geo_toolkit.geocode import geocode_to_geometry
 
     geometry = geocode_to_geometry("Andorra")

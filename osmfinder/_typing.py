@@ -219,9 +219,7 @@ def _calculate_geodetic_area(geometry: "BaseGeometry") -> float:
     return cast("float", poly_area_km2)
 
 
-def _generate_file_names(
-    ids: np.ndarray, names: np.ndarray, parents: np.ndarray
-) -> np.ndarray:
+def _generate_file_names(ids: np.ndarray, names: np.ndarray, parents: np.ndarray) -> np.ndarray:
     """Generate full file names from the parent hierarchy of the index."""
     ids_index = {extract_id: i for i, extract_id in enumerate(ids)}
 

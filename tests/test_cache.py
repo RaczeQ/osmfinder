@@ -24,7 +24,7 @@ from osmfinder.extract import (
     clear_osm_index_cache,
 )
 from osmfinder.finder import display_available_extracts
-from osmfinder.sources.bbbike import BBBIKE_EXTRACTS_INDEX_URL, _load_bbbike_index
+from osmfinder.sources.bbbike import _load_bbbike_index
 from osmfinder.sources.geofabrik import _load_geofabrik_index
 
 
@@ -189,10 +189,28 @@ def test_written_index_is_valid_geoparquet_1_1(tmp_path: Path) -> None:
 
     from tests._helpers import _index_from_records
 
-    index = _index_from_records([
-        {"id": "a", "name": "A", "file_name": "a", "parent": "root", "area": 1.0, "url": "http://x/a", "geometry": box(0, 0, 1, 1)},
-        {"id": "b", "name": "B", "file_name": "b", "parent": "root", "area": 4.0, "url": "http://x/b", "geometry": box(10, 10, 12, 12)},
-    ])
+    index = _index_from_records(
+        [
+            {
+                "id": "a",
+                "name": "A",
+                "file_name": "a",
+                "parent": "root",
+                "area": 1.0,
+                "url": "http://x/a",
+                "geometry": box(0, 0, 1, 1),
+            },
+            {
+                "id": "b",
+                "name": "B",
+                "file_name": "b",
+                "parent": "root",
+                "area": 4.0,
+                "url": "http://x/b",
+                "geometry": box(10, 10, 12, 12),
+            },
+        ]
+    )
 
     cache_path = tmp_path / "index.parquet"
     write_parquet_index(index, cache_path)

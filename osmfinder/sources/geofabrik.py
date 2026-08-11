@@ -6,17 +6,17 @@ This module contains wrapper for publically available Geofabrik download server.
 
 import json
 import operator
-from typing import Any, Optional
+from typing import Any
 
 import requests
 from shapely.geometry import shape
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.extract import load_index_decorator
 
 GEOFABRIK_INDEX_URL = "https://download.geofabrik.de/index-v1.json"
-GEOFABRIK_INDEX: Optional[OsmExtractsIndex] = None
+GEOFABRIK_INDEX: OsmExtractsIndex | None = None
 
 __all__ = ["_get_geofabrik_index"]
 
@@ -69,7 +69,9 @@ def _parse_geofabrik_index(parsed_data: dict[str, Any]) -> list[OpenStreetMapExt
         extract_id = f"{geofabrik_enum_value}_{raw_id}"
         name = raw_id.replace("/", "_")
         parent = (
-            f"{geofabrik_enum_value}_{raw_parent}" if raw_parent is not None else geofabrik_enum_value
+            f"{geofabrik_enum_value}_{raw_parent}"
+            if raw_parent is not None
+            else geofabrik_enum_value
         )
         url = operator.itemgetter("pbf")(properties["urls"])
         geometry = shape(feature["geometry"])

@@ -5,20 +5,20 @@ This module contains wrapper for publically available OpenStreetMap.fr download 
 """
 
 import re
-from typing import Any, Optional
+from typing import Any
 
 import requests
 from tqdm import tqdm
 
-from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
 from osmfinder._compat import FORCE_TERMINAL
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
-from osmfinder.parsers.poly import parse_polygon_file
+from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.extract import load_index_decorator
+from osmfinder.parsers.poly import parse_polygon_file
 
 OPENSTREETMAP_FR_POLYGONS_INDEX_URL = "https://download.openstreetmap.fr/polygons"
 OPENSTREETMAP_FR_EXTRACTS_INDEX_URL = "https://download.openstreetmap.fr/extracts"
-OPENSTREETMAP_FR_INDEX: Optional[OsmExtractsIndex] = None
+OPENSTREETMAP_FR_INDEX: OsmExtractsIndex | None = None
 
 __all__ = ["_get_openstreetmap_fr_index"]
 

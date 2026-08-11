@@ -1,9 +1,10 @@
 """OpenStreetMap extract class."""
 
 import warnings
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional, overload
+from typing import Any, overload
 
 import platformdirs
 from dateutil.relativedelta import relativedelta
@@ -13,12 +14,15 @@ from requests import HTTPError
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS
 from osmfinder._io import read_parquet_index, write_parquet_index
-from osmfinder._typing import OsmExtractSource, OsmExtractsIndex
-from osmfinder.exceptions import MissingOsmCacheWarning, OldOsmCacheWarning, OsmExtractIndexCorruptedError, OsmExtractIndexOutdatedWarning
-
-LFS_DIRECTORY_URL = (
-    "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/precalculated_indexes"
+from osmfinder._typing import OsmExtractsIndex, OsmExtractSource
+from osmfinder.exceptions import (
+    MissingOsmCacheWarning,
+    OldOsmCacheWarning,
+    OsmExtractIndexCorruptedError,
+    OsmExtractIndexOutdatedWarning,
 )
+
+LFS_DIRECTORY_URL = "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/precalculated_indexes"
 
 
 def load_index_decorator(
@@ -126,7 +130,7 @@ def clear_osm_index_cache() -> None: ...
 def clear_osm_index_cache(extract_source: OsmExtractSource) -> None: ...
 
 
-def clear_osm_index_cache(extract_source: Optional[OsmExtractSource] = None) -> None:
+def clear_osm_index_cache(extract_source: OsmExtractSource | None = None) -> None:
     """Clear cached osm index."""
     if extract_source is not None:
         extract_sources = [extract_source]

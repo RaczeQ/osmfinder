@@ -2,15 +2,13 @@
 
 from typing import Any
 
-import pytest
 from pytest_mock import MockerFixture
 from shapely import box
 from shapely.geometry import mapping
 from tqdm import tqdm
 
 from osmfinder._typing import OsmExtractSource
-from osmfinder.parsers.geojson import parse_geojson
-from osmfinder.sources.bbbike import BBBIKE_EXTRACTS_INDEX_URL, _iterate_bbbike_index
+from osmfinder.sources.bbbike import BBBIKE_EXTRACTS_INDEX_URL
 from osmfinder.sources.geo2day import _find_subregion_links
 from osmfinder.sources.geofabrik import _parse_geofabrik_index
 from osmfinder.sources.movisda import (

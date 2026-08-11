@@ -6,20 +6,20 @@ https://geo2day.com/).
 Each region is described by a GeoJSON boundary file.
 """
 
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests
 from tqdm import tqdm
 
-from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
 from osmfinder._compat import FORCE_TERMINAL
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
-from osmfinder.parsers.geojson import parse_geojson_file
+from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.extract import load_index_decorator
+from osmfinder.parsers.geojson import parse_geojson_file
 
 GEO2DAY_BASE_URL = "https://geo2day.com/"
-GEO2DAY_INDEX: Optional[OsmExtractsIndex] = None
+GEO2DAY_INDEX: OsmExtractsIndex | None = None
 
 
 __all__ = ["_get_geo2day_index"]

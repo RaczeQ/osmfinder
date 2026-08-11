@@ -1,6 +1,6 @@
 """Poly file parser function."""
 
-from typing import Any, Optional
+from typing import Any
 
 import requests
 from shapely.geometry import MultiPolygon
@@ -10,7 +10,7 @@ from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGEN
 __all__ = ["parse_polygon_file"]
 
 
-def parse_polygon_file(polygon_url: str) -> Optional[MultiPolygon]:  # pragma: no cover
+def parse_polygon_file(polygon_url: str) -> MultiPolygon | None:  # pragma: no cover
     """
     Parse poly file from URL to geometry.
 

@@ -4,13 +4,13 @@ OpenStreetMap extracts tree.
 This module contains function for displaying available extracts in the tree form.
 """
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from rich.tree import Tree
 
-from osmfinder._typing import OsmExtractsIndex
-from osmfinder.extract import OsmExtractSource
+from osmfinder._typing import OsmExtractsIndex, OsmExtractSource
 
 
 def get_available_extracts_as_rich_tree(
