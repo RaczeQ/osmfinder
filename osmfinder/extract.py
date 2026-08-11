@@ -1,14 +1,11 @@
 """OpenStreetMap extract class."""
 
-import re
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, cast, overload
+from typing import Any, Callable, Optional, overload
 
-import numpy as np
 import platformdirs
-from anyascii import anyascii
 from dateutil.relativedelta import relativedelta
 from pooch import HTTPDownloader, retrieve
 from pooch import get_logger as get_pooch_logger
@@ -16,11 +13,8 @@ from requests import HTTPError
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS
 from osmfinder._io import read_parquet_index, write_parquet_index
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
+from osmfinder._typing import OsmExtractSource, OsmExtractsIndex
 from osmfinder.exceptions import MissingOsmCacheWarning, OldOsmCacheWarning
-
-if TYPE_CHECKING:  # pragma: no cover
-    from shapely.geometry.base import BaseGeometry
 
 LFS_DIRECTORY_URL = (
     "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/precalculated_indexes"
@@ -84,12 +78,6 @@ def load_index_decorator(
                     )
 
                 index = function()
-                # fix invalid geometries before computing metrics and persisting the index
-                index = _ensure_valid_geometries(index)
-                # calculate extracts area
-                index = _add_areas_to_index(index)
-                # generate full file names
-                index = _add_file_names_to_index(index)
 
             # Check if columns are right
             if set(EXPECTED_COLUMNS).symmetric_difference(_index_columns(index)):
@@ -132,80 +120,6 @@ def load_index_decorator(
 def _index_columns(index: OsmExtractsIndex) -> set[str]:
     """Return the set of column names present in an OsmExtractsIndex."""
     return {"id", "name", "file_name", "parent", "geometry", "area", "url"}
-
-
-def _ensure_valid_geometries(index: OsmExtractsIndex) -> OsmExtractsIndex:
-    """
-    Fix topologically invalid geometries in an extracts index.
-
-    Some sources contain invalid geometries (self-intersections, nested shells).
-    These would raise ``GEOSException: TopologyException`` during the coverage
-    search (intersection / difference / union).
-    """
-    from shapely import is_valid, make_valid
-
-    invalid_geometries_mask = ~is_valid(index.geometries)
-    if invalid_geometries_mask.any():
-        fixed_geometries = index.geometries.copy()
-        fixed_geometries[invalid_geometries_mask] = make_valid(
-            index.geometries[invalid_geometries_mask]
-        )
-        return OsmExtractsIndex(
-            ids=index.ids,
-            geometries=fixed_geometries,
-            areas=index.areas,
-            file_names=index.file_names,
-            names=index.names,
-            parents=index.parents,
-            urls=index.urls,
-        )
-    return index
-
-
-def _add_areas_to_index(index: OsmExtractsIndex) -> OsmExtractsIndex:
-    """Calculate and set the geodetic area (in km²) for each extract geometry."""
-    areas = np.array([_calculate_geodetic_area(geometry) for geometry in index.geometries])
-    # Sort by area and id (ascending), mirroring the previous GeoDataFrame behaviour.
-    sort_indices = np.lexsort((index.ids, areas))
-    return OsmExtractsIndex(
-        ids=index.ids[sort_indices],
-        geometries=index.geometries[sort_indices],
-        areas=areas[sort_indices],
-        file_names=index.file_names[sort_indices],
-        names=index.names[sort_indices],
-        parents=index.parents[sort_indices],
-        urls=index.urls[sort_indices],
-    )
-
-
-def _add_file_names_to_index(index: OsmExtractsIndex) -> OsmExtractsIndex:
-    """Generate full file names for each extract and set them on the index."""
-    apply_function = _get_full_file_name_function(index)
-    file_names = np.array([apply_function(extract_id) for extract_id in index.ids])
-    return OsmExtractsIndex(
-        ids=index.ids,
-        geometries=index.geometries,
-        areas=index.areas,
-        file_names=file_names,
-        names=index.names,
-        parents=index.parents,
-        urls=index.urls,
-    )
-
-
-def build_index_from_extracts(extracts: list[OpenStreetMapExtract]) -> OsmExtractsIndex:
-    """Transforms a list of OpenStreetMapExtracts to an OsmExtractsIndex."""
-    return OsmExtractsIndex(
-        ids=np.array([extract.id for extract in extracts], dtype=object),
-        geometries=np.array([extract.geometry for extract in extracts], dtype=object),
-        areas=np.array(
-            [_calculate_geodetic_area(extract.geometry) for extract in extracts], dtype=float
-        ),
-        file_names=np.array([extract.file_name for extract in extracts], dtype=object),
-        names=np.array([extract.name for extract in extracts], dtype=object),
-        parents=np.array([extract.parent for extract in extracts], dtype=object),
-        urls=np.array([extract.url for extract in extracts], dtype=object),
-    )
 
 
 @overload
@@ -282,46 +196,6 @@ def _download_precalculated_index_from_github(destination_path: Path) -> bool:
         raise
 
     return True
-
-
-def _calculate_geodetic_area(geometry: "BaseGeometry") -> float:
-    from pyproj import Geod
-    from shapely.ops import orient
-
-    geod = Geod(ellps="WGS84")
-    poly_area_m2, _ = geod.geometry_area_perimeter(orient(geometry, sign=1))
-    poly_area_km2 = round(poly_area_m2) / 1_000_000
-    return cast("float", poly_area_km2)
-
-
-def _slugify_file_name_part(value: str) -> str:
-    """
-    Creates a slug part from file name.
-
-    Makes it lowercase, replaces whitespace with underscores and all diactric characters into ascii.
-    """
-    ascii_value = re.sub(r"\s+", "_", anyascii(value).strip().lower())
-    return re.sub(r"[^a-z0-9_-]+", "", ascii_value)
-
-
-def _get_full_file_name_function(index: OsmExtractsIndex) -> Callable[[str], str]:
-    ids_index = {extract_id: i for i, extract_id in enumerate(index.ids)}
-
-    def inner_function(id: str) -> str:
-        current_id = id
-        parts = []
-        while True:
-            if current_id not in ids_index:
-                parts.append(_slugify_file_name_part(current_id))
-                break
-            else:
-                matching_row_idx = ids_index[current_id]
-                parts.append(_slugify_file_name_part(index.names[matching_row_idx]))
-                current_id = index.parents[matching_row_idx]
-
-        return "_".join(parts[::-1])
-
-    return inner_function
 
 
 def _get_file_creation_date(path: Path) -> datetime:

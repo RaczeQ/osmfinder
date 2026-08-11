@@ -12,14 +12,9 @@ from tqdm import tqdm
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
 from osmfinder._compat import FORCE_TERMINAL
-from osmfinder._typing import OsmExtractsIndex
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
 from osmfinder.parsers.poly import parse_polygon_file
-from osmfinder.extract import (
-    OpenStreetMapExtract,
-    OsmExtractSource,
-    build_index_from_extracts,
-    load_index_decorator,
-)
+from osmfinder.extract import load_index_decorator
 
 OPENSTREETMAP_FR_POLYGONS_INDEX_URL = "https://download.openstreetmap.fr/polygons"
 OPENSTREETMAP_FR_EXTRACTS_INDEX_URL = "https://download.openstreetmap.fr/extracts"
@@ -55,7 +50,7 @@ def _load_openstreetmap_fr_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: 
             pbar=pbar, extract_soup_objects=extract_soup_objects
         )
 
-    return build_index_from_extracts(extracts)
+    return OsmExtractsIndex.from_extracts(extracts)
 
 
 def _gather_all_openstreetmap_fr_urls(

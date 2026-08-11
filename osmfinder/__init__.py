@@ -8,11 +8,8 @@ GEO2day) behind a single API. It can look up an extract by a text query, or find
 of extracts covering an arbitrary geometry, and download the matching `*.osm.pbf` files.
 """
 
-from osmfinder.extract import (
-    OpenStreetMapExtract,
-    OsmExtractSource,
-    clear_osm_index_cache,
-)
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource
+from osmfinder.extract import clear_osm_index_cache
 from osmfinder.finder import (
     OsmExtractSourceLike,
     display_available_extracts,

@@ -25,7 +25,7 @@ from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 from tqdm.contrib.concurrent import process_map
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS
-from osmfinder._typing import OsmExtractsIndex
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
 from osmfinder.exceptions import (
     GeometryNotCoveredError,
     GeometryNotCoveredWarning,
@@ -39,11 +39,7 @@ from osmfinder.exceptions import (
 )
 from osmfinder._compat import FORCE_TERMINAL
 from osmfinder.sources.bbbike import _get_bbbike_index
-from osmfinder.extract import (
-    OpenStreetMapExtract,
-    OsmExtractSource,
-    clear_osm_index_cache,
-)
+from osmfinder.extract import clear_osm_index_cache
 from osmfinder.sources.tree import get_available_extracts_as_rich_tree
 from osmfinder.sources.geo2day import _get_geo2day_index
 from osmfinder.sources.geofabrik import _get_geofabrik_index
@@ -308,9 +304,11 @@ def get_extract_by_query(
         query_lower = query.lower().strip()
         query_lower_spaces = query_lower.replace("_", " ")
 
-        file_names_lower = np.char.lower(index.file_names)
+        file_names = index.file_names.astype(str)
+        names = index.names.astype(str)
+        file_names_lower = np.char.lower(file_names)
         file_names_lower_spaces = np.char.replace(file_names_lower, "_", " ")
-        names_lower = np.char.lower(index.names)
+        names_lower = np.char.lower(names)
         names_lower_spaces = np.char.replace(names_lower, "_", " ")
 
         file_name_matched_rows = (file_names_lower == query_lower) | (
@@ -1091,7 +1089,7 @@ def _filter_extracts(
 
     matching_mask = np.isin(polygons_index.ids, list(extracts_ids))
     sorted_extracts = polygons_index.filter_by_mask(matching_mask)
-    # Sort by area descending, then id ascending (mirrors the previous GeoDataFrame behaviour).
+    # Sort by area descending, then id ascending.
     sort_indices = np.lexsort((sorted_extracts.ids, -sorted_extracts.areas))
     sorted_extracts = OsmExtractsIndex(
         ids=sorted_extracts.ids[sort_indices],

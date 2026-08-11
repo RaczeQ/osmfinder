@@ -12,13 +12,8 @@ import requests
 from shapely.geometry import shape
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
-from osmfinder._typing import OsmExtractsIndex
-from osmfinder.extract import (
-    OpenStreetMapExtract,
-    OsmExtractSource,
-    build_index_from_extracts,
-    load_index_decorator,
-)
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
+from osmfinder.extract import load_index_decorator
 
 GEOFABRIK_INDEX_URL = "https://download.geofabrik.de/index-v1.json"
 GEOFABRIK_INDEX: Optional[OsmExtractsIndex] = None
@@ -50,7 +45,7 @@ def _load_geofabrik_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cove
     )
     parsed_data = json.loads(result.text)
     extracts = _parse_geofabrik_index(parsed_data)
-    return build_index_from_extracts(extracts)
+    return OsmExtractsIndex.from_extracts(extracts)
 
 
 def _parse_geofabrik_index(parsed_data: dict[str, Any]) -> list[OpenStreetMapExtract]:

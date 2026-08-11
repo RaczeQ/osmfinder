@@ -13,13 +13,8 @@ from typing import Any, Optional
 import requests
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
-from osmfinder._typing import OsmExtractsIndex
-from osmfinder.extract import (
-    OpenStreetMapExtract,
-    OsmExtractSource,
-    build_index_from_extracts,
-    load_index_decorator,
-)
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
+from osmfinder.extract import load_index_decorator
 
 MOVISDA_ADMIN_GEOJSON_URL = "https://osm.download.movisda.io/admin/Admin-latest.geojson"
 MOVISDA_ADMIN_PBF_BASE_URL = "https://osm.download.movisda.io/admin"
@@ -64,7 +59,7 @@ def _load_movisda_admin_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no 
         pbf_base_url=MOVISDA_ADMIN_PBF_BASE_URL,
         source_enum=OsmExtractSource.movisda_admin,
     )
-    return build_index_from_extracts(extracts)
+    return OsmExtractsIndex.from_extracts(extracts)
 
 
 @load_index_decorator(OsmExtractSource.movisda_grid)
@@ -80,7 +75,7 @@ def _load_movisda_grid_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no c
         pbf_base_url=MOVISDA_GRID_PBF_BASE_URL,
         source_enum=OsmExtractSource.movisda_grid,
     )
-    return build_index_from_extracts(extracts)
+    return OsmExtractsIndex.from_extracts(extracts)
 
 
 def _iterate_movisda_geojson(

@@ -14,14 +14,9 @@ from tqdm import tqdm
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
 from osmfinder._compat import FORCE_TERMINAL
-from osmfinder._typing import OsmExtractsIndex
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, OsmExtractsIndex
 from osmfinder.parsers.geojson import parse_geojson_file
-from osmfinder.extract import (
-    OpenStreetMapExtract,
-    OsmExtractSource,
-    build_index_from_extracts,
-    load_index_decorator,
-)
+from osmfinder.extract import load_index_decorator
 
 GEO2DAY_BASE_URL = "https://geo2day.com/"
 GEO2DAY_INDEX: Optional[OsmExtractsIndex] = None
@@ -55,7 +50,7 @@ def _load_geo2day_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cover
         pbar.set_description(OsmExtractSource.geo2day.value)
         extracts = _parse_geo2day_urls(pbar=pbar, region_objects=region_objects)
 
-    return build_index_from_extracts(extracts)
+    return OsmExtractsIndex.from_extracts(extracts)
 
 
 def _region_path_segments(url: str) -> list[str]:
