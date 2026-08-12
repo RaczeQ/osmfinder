@@ -24,9 +24,12 @@ from osmfinder.exceptions import (
 
 LFS_DIRECTORY_URL = "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/precalculated_indexes"
 
+_QUICK_REFRESH_SOURCES: set[OsmExtractSource] = set()
+
 
 def load_index_decorator(
     extract_source: OsmExtractSource,
+    fast_build: bool = False,
 ) -> Callable[[Callable[..., OsmExtractsIndex]], Callable[..., OsmExtractsIndex]]:
     """
     Decorator for loading OSM extracts index.
@@ -34,11 +37,17 @@ def load_index_decorator(
     Args:
         extract_source (OsmExtractSource): OpenStreetMap extract source.
             Used to save the index to cache.
+        fast_build (bool): If True, skip the MissingOsmCacheWarning when the
+            index must be built locally and register the source as a quick-refresh
+            source for the warning message. Defaults to False.
     """
 
     def inner(
         function: Callable[..., OsmExtractsIndex],
     ) -> Callable[..., OsmExtractsIndex]:
+        if fast_build:
+            _QUICK_REFRESH_SOURCES.add(extract_source)
+
         def wrapper(**kwargs: Any) -> OsmExtractsIndex:
             global_cache_file_path = _get_global_cache_file_path(extract_source)
             global_cache_file_path.parent.mkdir(exist_ok=True, parents=True)
@@ -86,12 +95,13 @@ def load_index_decorator(
                 index = _read_index_from_file()
             # Calculate index locally
             else:  # pragma: no cover
-                if extract_source != OsmExtractSource.geofabrik:
+                if not fast_build:
+                    quick_refresh_names = ", ".join(sorted(s.value for s in _QUICK_REFRESH_SOURCES))
                     warnings.warn(
                         f"Library has to build an index for the {extract_source} provider."
-                        " This can take multiple minutes. To avoid waiting for building an index,"
-                        " the `osm_extract_source` parameter can be changed to `Geofabrik`, since"
-                        " the index for it doesn't have to be built.",
+                        " This can take multiple minutes. To avoid waiting, use one of the"
+                        f" quick-refresh sources that load from a single file:"
+                        f" {quick_refresh_names}.",
                         MissingOsmCacheWarning,
                         stacklevel=0,
                     )

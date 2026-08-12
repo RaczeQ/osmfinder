@@ -2,6 +2,8 @@
 
 import datetime
 import tempfile
+import warnings
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +13,7 @@ from pytest_mock import MockerFixture
 from shapely import box, to_wkb
 
 from osmfinder._io import write_parquet_index
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.exceptions import (
     MissingOsmCacheWarning,
     OldOsmCacheWarning,
@@ -26,6 +28,7 @@ from osmfinder.extract import (
 from osmfinder.finder import display_available_extracts
 from osmfinder.sources.bbbike import _load_bbbike_index
 from osmfinder.sources.geofabrik import _load_geofabrik_index
+from osmfinder.sources.movisda import _load_movisda_admin_index, _load_movisda_grid_index
 
 
 def test_proper_cache_saving() -> None:
@@ -99,6 +102,59 @@ def test_generate_index_warning(mocker: MockerFixture) -> None:
         with pytest.warns(MissingOsmCacheWarning):
             _load_bbbike_index(force_recalculation=True)
 
+    finally:
+        if global_moved_path is not None:
+            global_path.unlink(missing_ok=True)
+            global_moved_path.rename(global_path)
+            global_moved_path.unlink(missing_ok=True)
+
+        if local_moved_path is not None:
+            local_path.unlink(missing_ok=True)
+            local_moved_path.rename(local_path)
+            local_moved_path.unlink(missing_ok=True)
+
+
+@pytest.mark.parametrize(
+    "extract_source,load_function",
+    [
+        (OsmExtractSource.geofabrik, _load_geofabrik_index),
+        (OsmExtractSource.movisda_admin, _load_movisda_admin_index),
+        (OsmExtractSource.movisda_grid, _load_movisda_grid_index),
+    ],
+)
+def test_fast_sources_skip_missing_cache_warning(
+    extract_source: OsmExtractSource,
+    load_function: Callable[..., OsmExtractsIndex],
+) -> None:
+    """Test if fast sources do not emit MissingOsmCacheWarning when building locally."""
+    global_path = _get_global_cache_file_path(extract_source)
+    local_path = _get_local_cache_file_path(extract_source)
+
+    global_moved_path = None
+    local_moved_path = None
+    if global_path.exists():
+        global_moved_path = global_path.with_name(
+            f"{extract_source.value.lower()}_index_moved.parquet"
+        )
+        global_path.rename(global_moved_path)
+
+    if local_path.exists():
+        local_moved_path = local_path.with_name(
+            f"{extract_source.value.lower()}_index_moved.parquet"
+        )
+        local_path.rename(local_moved_path)
+
+    try:
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always")
+            load_function(force_recalculation=True)
+        missing_cache_warnings = [
+            w for w in caught_warnings if issubclass(w.category, MissingOsmCacheWarning)
+        ]
+        assert not missing_cache_warnings, (
+            f"Expected no MissingOsmCacheWarning for fast source {extract_source}, "
+            f"but got: {[str(w.message) for w in missing_cache_warnings]}"
+        )
     finally:
         if global_moved_path is not None:
             global_path.unlink(missing_ok=True)

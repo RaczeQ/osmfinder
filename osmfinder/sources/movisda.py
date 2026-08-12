@@ -46,7 +46,7 @@ def _get_movisda_grid_index(**kwargs: Any) -> OsmExtractsIndex:
     return MOVISDA_GRID_INDEX
 
 
-@load_index_decorator(OsmExtractSource.movisda_admin)
+@load_index_decorator(OsmExtractSource.movisda_admin, fast_build=True)
 def _load_movisda_admin_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cover
     """
     Load available administrative extracts from the Movisda download service.
@@ -62,7 +62,7 @@ def _load_movisda_admin_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no 
     return OsmExtractsIndex.from_extracts(extracts)
 
 
-@load_index_decorator(OsmExtractSource.movisda_grid)
+@load_index_decorator(OsmExtractSource.movisda_grid, fast_build=True)
 def _load_movisda_grid_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cover
     """
     Load available grid extracts from the Movisda download service.

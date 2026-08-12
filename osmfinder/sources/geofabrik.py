@@ -30,7 +30,7 @@ def _get_geofabrik_index(**kwargs: Any) -> OsmExtractsIndex:
     return GEOFABRIK_INDEX
 
 
-@load_index_decorator(OsmExtractSource.geofabrik)
+@load_index_decorator(OsmExtractSource.geofabrik, fast_build=True)
 def _load_geofabrik_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cover
     """
     Load available extracts from GeoFabrik download service.
