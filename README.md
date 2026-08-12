@@ -1,4 +1,8 @@
-# osmfinder
+<p align="center">
+  <img width="300" src="https://raw.githubusercontent.com/raczeq/osmfinder/main/docs/assets/logos/osmfinder_logo.png"><br/>
+</p>
+
+# OSM Finder
 
 Find and download publicly available OpenStreetMap `*.osm.pbf` extracts by **name**, **id** or
 **geometry**.
@@ -70,13 +74,10 @@ osmfinder.get_extract_by_query("Berlin", "geofabrik,bbbike")
 
 ## Index cache
 
-Provider indexes are cached locally (in the platform cache dir) as gzip-compressed FlatGeobuf
-(`*.fgb.gz`), read directly through GDAL's `/vsigzip/` virtual filesystem. Precalculated indexes
-are downloaded from this repo's `precalculated_indexes/` folder on first use, so most sources don't
-need to be rebuilt from scratch. Use `clear_osm_index_cache()` to force a refresh.
-
-FlatGeobuf + gzip keeps the index files essentially as small as GeoParquet while relying only on
-`pyogrio` (already a GeoPandas dependency) instead of the much heavier `pyarrow`.
+Provider indexes are cached locally (in the platform cache dir) as GeoParquet (`*.parquet`).
+Precalculated indexes are downloaded from this repo's `precalculated_indexes/` folder on first use,
+so most sources don't need to be rebuilt from scratch. Use `clear_osm_index_cache()` to force a
+refresh.
 
 ## License
 
