@@ -23,7 +23,6 @@ from osmfinder.finder import (
     _get_index_for_sources,
     _resolve_extract_sources,
     find_smallest_containing_extracts,
-    find_smallest_containing_extracts_total,
     get_extract_by_query,
 )
 from tests._helpers import _index_from_extracts, _index_from_records
@@ -202,8 +201,9 @@ def test_uncovered_geometry_extract(
             "POLYGON ((-43.064 29.673, -43.064 29.644, -43.017 29.644,"
             " -43.017 29.673, -43.064 29.673))"
         )
-        find_smallest_containing_extracts_total(
+        find_smallest_containing_extracts(
             geometry=geometry,
+            source="any",
             allow_uncovered_geometry=allow_uncovered_geometry,
             geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
         )

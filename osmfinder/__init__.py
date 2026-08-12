@@ -13,22 +13,16 @@ from osmfinder.extract import clear_osm_index_cache
 from osmfinder.finder import (
     OsmExtractSourceLike,
     display_available_extracts,
+    download,
     download_extract_by_query,
     download_extracts_pbf_files,
+    find,
     find_and_download_extracts_pbf_files,
-    find_smallest_containing_bbbike_extracts,
     find_smallest_containing_extracts,
-    find_smallest_containing_extracts_total,
-    find_smallest_containing_geofabrik_extracts,
-    find_smallest_containing_openstreetmap_fr_extracts,
     get_extract_by_query,
 )
 
 __version__ = "0.1.0"
-
-# Friendly short aliases.
-find = get_extract_by_query
-download = download_extract_by_query
 
 __all__ = [
     "OpenStreetMapExtract",
@@ -41,10 +35,6 @@ __all__ = [
     "download_extracts_pbf_files",
     "find",
     "find_and_download_extracts_pbf_files",
-    "find_smallest_containing_bbbike_extracts",
     "find_smallest_containing_extracts",
-    "find_smallest_containing_extracts_total",
-    "find_smallest_containing_geofabrik_extracts",
-    "find_smallest_containing_openstreetmap_fr_extracts",
     "get_extract_by_query",
 ]

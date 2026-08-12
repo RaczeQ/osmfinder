@@ -21,8 +21,6 @@ def test_public_api_exposed() -> None:
         "clear_osm_index_cache",
     ):
         assert hasattr(osmfinder, name)
-    assert osmfinder.find is osmfinder.get_extract_by_query
-    assert osmfinder.download is osmfinder.download_extract_by_query
 
 
 @pytest.mark.parametrize(

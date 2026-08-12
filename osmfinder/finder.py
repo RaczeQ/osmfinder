@@ -49,10 +49,7 @@ from osmfinder.sources.tree import get_available_extracts_as_rich_tree
 __all__ = [
     "download_extracts_pbf_files",
     "find_and_download_extracts_pbf_files",
-    "find_smallest_containing_extracts_total",
-    "find_smallest_containing_geofabrik_extracts",
-    "find_smallest_containing_openstreetmap_fr_extracts",
-    "find_smallest_containing_bbbike_extracts",
+    "find_smallest_containing_extracts",
     "clear_osm_index_cache",
     "get_extract_by_query",
     "download_extract_by_query",
@@ -484,9 +481,9 @@ def download_extract_by_query(
 
 
 def find_and_download_extracts_pbf_files(
-    geometry: BaseGeometry | BaseMultipartGeometry,
-    source: OsmExtractSourceLike,
-    download_directory: str | Path,
+    geometry: BaseGeometry,
+    source: OsmExtractSourceLike = "any",
+    download_directory: str | Path = "files",
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
     progressbar: bool = True,
@@ -501,11 +498,12 @@ def find_and_download_extracts_pbf_files(
     be covered.
 
     Args:
-        geometry (Union[BaseGeometry, BaseMultipartGeometry]): Geometry to be covered.
+        geometry (BaseGeometry): Geometry to be covered.
         source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
             'BBBike', 'OSMfr', or an iterable / comma-separated string of those
-            (e.g. ['BBBike', 'OSM_fr'] or 'bbbike,osmfr').
+            (e.g. ['BBBike', 'OSM_fr'] or 'bbbike,osmfr'). Defaults to 'any'.
         download_directory (Union[str, Path]): Directory where PBF files should be saved.
+            Defaults to "files".
         geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union metric
             for selecting the matching OSM extracts. Has to be in range between 0 and 1.
             Defaults to 0.01.
@@ -589,165 +587,9 @@ def display_available_extracts(
         raise ValueError(f"Unknown OSM extracts source: {source}.") from ex
 
 
-def find_smallest_containing_extracts_total(
-    geometry: BaseGeometry | BaseMultipartGeometry,
-    geometry_coverage_iou_threshold: float = 0.01,
-    allow_uncovered_geometry: bool = False,
-    excluded_extracts_ids: set[str] | None = None,
-) -> list[OpenStreetMapExtract]:
-    """
-    Find smallest extracts from all OSM extract indexes that contains given polygon.
-
-    Iterates all indexes and finds smallest extracts that covers a given geometry.
-
-    Extracts are selected based on the highest value of the Intersection over Union metric with
-    geometry. Some extracts might be discarded because of low IoU metric value leaving some parts
-    of the geometry uncovered.
-
-    Args:
-        geometry (Union[BaseGeometry, BaseMultipartGeometry]): Geometry to be covered.
-        geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union metric
-            for selecting the matching OSM extracts. Is best matching extract has value lower than
-            the threshold, it is discarded (except the first one). Has to be in range between
-            0 and 1. Value of 0 will allow every intersected extract, value of 1 will only allow
-            extracts that match the geometry exactly. Defaults to 0.01.
-        allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
-            by any OSM extract. Defaults to `False`.
-        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
-            Useful for skipping extracts that are unavailable for download. Defaults to `None`.
-
-    Returns:
-        List[OpenStreetMapExtract]: List of extracts name, URL to download it and boundary polygon.
-    """
-    return _find_smallest_containing_extracts(
-        geometry=geometry,
-        polygons_index=_get_combined_index(),
-        geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-        allow_uncovered_geometry=allow_uncovered_geometry,
-        excluded_extracts_ids=excluded_extracts_ids,
-    )
-
-
-def find_smallest_containing_geofabrik_extracts(
-    geometry: BaseGeometry | BaseMultipartGeometry,
-    geometry_coverage_iou_threshold: float = 0.01,
-    allow_uncovered_geometry: bool = False,
-    excluded_extracts_ids: set[str] | None = None,
-) -> list[OpenStreetMapExtract]:
-    """
-    Find smallest extracts from Geofabrik that contains given geometry.
-
-    Iterates a geofabrik index and finds smallest extracts that covers a given geometry.
-
-    Extracts are selected based on the highest value of the Intersection over Union metric with
-    geometry. Some extracts might be discarded because of low IoU metric value leaving some parts
-    of the geometry uncovered.
-
-    Args:
-        geometry (Union[BaseGeometry, BaseMultipartGeometry]): Geometry to be covered.
-        geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union metric
-            for selecting the matching OSM extracts. Is best matching extract has value lower than
-            the threshold, it is discarded (except the first one). Has to be in range between
-            0 and 1. Value of 0 will allow every intersected extract, value of 1 will only allow
-            extracts that match the geometry exactly. Defaults to 0.01.
-        allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
-            by any OSM extract. Defaults to `False`.
-        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
-            Useful for skipping extracts that are unavailable for download. Defaults to `None`.
-
-    Returns:
-        List[OpenStreetMapExtract]: List of extracts name, URL to download it and boundary polygon.
-    """
-    return _find_smallest_containing_extracts(
-        geometry=geometry,
-        polygons_index=OSM_EXTRACT_SOURCE_INDEX_FUNCTION[OsmExtractSource.geofabrik](),
-        geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-        allow_uncovered_geometry=allow_uncovered_geometry,
-        excluded_extracts_ids=excluded_extracts_ids,
-    )
-
-
-def find_smallest_containing_openstreetmap_fr_extracts(
-    geometry: BaseGeometry | BaseMultipartGeometry,
-    geometry_coverage_iou_threshold: float = 0.01,
-    allow_uncovered_geometry: bool = False,
-    excluded_extracts_ids: set[str] | None = None,
-) -> list[OpenStreetMapExtract]:
-    """
-    Find smallest extracts from OpenStreetMap.fr that contains given polygon.
-
-    Iterates an osm.fr index and finds smallest extracts that covers a given geometry.
-
-    Extracts are selected based on the highest value of the Intersection over Union metric with
-    geometry. Some extracts might be discarded because of low IoU metric value leaving some parts
-    of the geometry uncovered.
-
-    Args:
-        geometry (Union[BaseGeometry, BaseMultipartGeometry]): Geometry to be covered.
-        geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union metric
-            for selecting the matching OSM extracts. Is best matching extract has value lower than
-            the threshold, it is discarded (except the first one). Has to be in range between
-            0 and 1. Value of 0 will allow every intersected extract, value of 1 will only allow
-            extracts that match the geometry exactly. Defaults to 0.01.
-        allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
-            by any OSM extract. Defaults to `False`.
-        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
-            Useful for skipping extracts that are unavailable for download. Defaults to `None`.
-
-    Returns:
-        List[OpenStreetMapExtract]: List of extracts name, URL to download it and boundary polygon.
-    """
-    return _find_smallest_containing_extracts(
-        geometry=geometry,
-        polygons_index=OSM_EXTRACT_SOURCE_INDEX_FUNCTION[OsmExtractSource.osm_fr](),
-        geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-        allow_uncovered_geometry=allow_uncovered_geometry,
-        excluded_extracts_ids=excluded_extracts_ids,
-    )
-
-
-def find_smallest_containing_bbbike_extracts(
-    geometry: BaseGeometry | BaseMultipartGeometry,
-    geometry_coverage_iou_threshold: float = 0.01,
-    allow_uncovered_geometry: bool = False,
-    excluded_extracts_ids: set[str] | None = None,
-) -> list[OpenStreetMapExtract]:
-    """
-    Find smallest extracts from BBBike that contains given polygon.
-
-    Iterates an BBBike index and finds smallest extracts that covers a given geometry.
-
-    Extracts are selected based on the highest value of the Intersection over Union metric with
-    geometry. Some extracts might be discarded because of low IoU metric value leaving some parts
-    of the geometry uncovered.
-
-    Args:
-        geometry (Union[BaseGeometry, BaseMultipartGeometry]): Geometry to be covered.
-        geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union metric
-            for selecting the matching OSM extracts. Is best matching extract has value lower than
-            the threshold, it is discarded (except the first one). Has to be in range between
-            0 and 1. Value of 0 will allow every intersected extract, value of 1 will only allow
-            extracts that match the geometry exactly. Defaults to 0.01.
-        allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
-            by any OSM extract. Defaults to `False`.
-        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
-            Useful for skipping extracts that are unavailable for download. Defaults to `None`.
-
-    Returns:
-        List[OpenStreetMapExtract]: List of extracts name, URL to download it and boundary polygon.
-    """
-    return _find_smallest_containing_extracts(
-        geometry=geometry,
-        polygons_index=OSM_EXTRACT_SOURCE_INDEX_FUNCTION[OsmExtractSource.bbbike](),
-        geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-        allow_uncovered_geometry=allow_uncovered_geometry,
-        excluded_extracts_ids=excluded_extracts_ids,
-    )
-
-
 def find_smallest_containing_extracts(
-    geometry: BaseGeometry | BaseMultipartGeometry,
-    source: OsmExtractSourceLike,
+    geometry: BaseGeometry,
+    source: OsmExtractSourceLike = "any",
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
     excluded_extracts_ids: set[str] | None = None,
@@ -762,10 +604,10 @@ def find_smallest_containing_extracts(
     of the geometry uncovered.
 
     Args:
-        geometry (Union[BaseGeometry, BaseMultipartGeometry]): Geometry to be covered.
+        geometry (BaseGeometry): Geometry to be covered.
         source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
             'BBBike', 'OSMfr', or an iterable / comma-separated string of those
-            (e.g. ['BBBike', 'OSM_fr'] or 'bbbike,osmfr').
+            (e.g. ['BBBike', 'OSM_fr'] or 'bbbike,osmfr'). Defaults to 'any'.
         geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union metric
             for selecting the matching OSM extracts. Is best matching extract has value lower than
             the threshold, it is discarded (except the first one). Has to be in range between
@@ -794,7 +636,7 @@ def find_smallest_containing_extracts(
 
 
 def _find_smallest_containing_extracts(
-    geometry: BaseGeometry | BaseMultipartGeometry,
+    geometry: BaseGeometry,
     polygons_index: OsmExtractsIndex,
     num_of_multiprocessing_workers: int = -1,
     multiprocessing_activation_threshold: int | None = None,
@@ -812,10 +654,8 @@ def _find_smallest_containing_extracts(
     geometry. Some extracts might be discarded because of low IoU metric value leaving some parts
     of the geometry uncovered.
 
-    Geometry will be flattened into singluar geometries if it's `BaseMultipartGeometry`.
-
     Args:
-        geometry (Union[BaseGeometry, BaseMultipartGeometry]): Geometry to be covered.
+        geometry (BaseGeometry): Geometry to be covered.
         polygons_index (OsmExtractsIndex): Index of available extracts.
         num_of_multiprocessing_workers (int, optional): Number of workers used for multiprocessing.
             Defaults to -1 which results in a total number of available cpu threads.
@@ -1074,7 +914,7 @@ def _filter_extracts(
     Filter a set of extracts to include least overlaps in it.
 
     Args:
-        geometry (Union[BaseGeometry, BaseMultipartGeometry]): Geometry to be covered.
+        geometry (BaseGeometry): Geometry to be covered.
         extracts_ids (Iterable[str]): Group of selected extracts indexes.
         polygons_index (OsmExtractsIndex): Index of available extracts.
         num_of_multiprocessing_workers (int): Number of workers used for multiprocessing.
@@ -1217,3 +1057,149 @@ def _flatten_geometry(geometry: BaseGeometry) -> list[BaseGeometry]:
             geometries.extend(_flatten_geometry(sub_geom))
         return geometries
     return [geometry]
+
+
+@overload
+def find(
+    query: str,
+    source: OsmExtractSourceLike = "any",
+    *,
+    select_first_match: bool = True,
+    excluded_extracts_ids: set[str] | None = None,
+) -> OpenStreetMapExtract: ...
+
+
+@overload
+def find(
+    query: BaseGeometry,
+    source: OsmExtractSourceLike = "any",
+    *,
+    geometry_coverage_iou_threshold: float = 0.01,
+    allow_uncovered_geometry: bool = False,
+    excluded_extracts_ids: set[str] | None = None,
+) -> list[OpenStreetMapExtract]: ...
+
+
+def find(
+    query: str | BaseGeometry,
+    source: OsmExtractSourceLike = "any",
+    select_first_match: bool = True,
+    geometry_coverage_iou_threshold: float = 0.01,
+    allow_uncovered_geometry: bool = False,
+    excluded_extracts_ids: set[str] | None = None,
+) -> OpenStreetMapExtract | list[OpenStreetMapExtract]:
+    """
+    Find an OSM extract by name or geometry.
+
+    Dispatches to :func:`get_extract_by_query` when called with a string query,
+    or to :func:`find_smallest_containing_extracts` when called with a geometry.
+
+    Args:
+        query (Union[str, BaseGeometry]): Text query
+            or shapely geometry to search for.
+        source (OsmExtractSourceLike): OSM source name. Defaults to 'any'.
+        select_first_match (bool): When multiple extracts match the query by name, select the
+            first one (sorted by area ascending, then id) and emit a warning instead of raising
+            an error. Only used for string queries. Defaults to `True`.
+        geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union
+            metric for selecting the matching OSM extracts. Only used for geometry queries.
+            Defaults to 0.01.
+        allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
+            by any OSM extract. Only used for geometry queries. Defaults to `False`.
+        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
+            Useful for skipping extracts that are unavailable for download. Defaults to `None`.
+
+    Returns:
+        Union[OpenStreetMapExtract, list[OpenStreetMapExtract]]: Found extract or list
+            of extracts covering the geometry.
+    """
+    if isinstance(query, str):
+        return get_extract_by_query(
+            query,
+            source=source,
+            select_first_match=select_first_match,
+            excluded_extracts_ids=excluded_extracts_ids,
+        )
+    return find_smallest_containing_extracts(
+        query,
+        source=source,
+        geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
+        allow_uncovered_geometry=allow_uncovered_geometry,
+        excluded_extracts_ids=excluded_extracts_ids,
+    )
+
+
+@overload
+def download(
+    query: str,
+    source: OsmExtractSourceLike = "any",
+    *,
+    download_directory: str | Path = "files",
+    progressbar: bool = True,
+    select_first_match: bool = True,
+) -> Path: ...
+
+
+@overload
+def download(
+    query: BaseGeometry,
+    source: OsmExtractSourceLike = "any",
+    *,
+    download_directory: str | Path = "files",
+    geometry_coverage_iou_threshold: float = 0.01,
+    allow_uncovered_geometry: bool = False,
+    progressbar: bool = True,
+) -> list[tuple[OpenStreetMapExtract, Path]]: ...
+
+
+def download(
+    query: str | BaseGeometry,
+    source: OsmExtractSourceLike = "any",
+    download_directory: str | Path = "files",
+    progressbar: bool = True,
+    select_first_match: bool = True,
+    geometry_coverage_iou_threshold: float = 0.01,
+    allow_uncovered_geometry: bool = False,
+) -> Path | list[tuple[OpenStreetMapExtract, Path]]:
+    """
+    Download an OSM extract by name or geometry.
+
+    Dispatches to :func:`download_extract_by_query` when called with a string query,
+    or to :func:`find_and_download_extracts_pbf_files` when called with a geometry.
+
+    Args:
+        query (Union[str, BaseGeometry]): Text query
+            or shapely geometry to search for.
+        source (OsmExtractSourceLike): OSM source name. Defaults to 'any'.
+        download_directory (Union[str, Path]): Directory where PBF files should be saved.
+            Defaults to "files".
+        progressbar (bool): Show progress bar. Defaults to True.
+        select_first_match (bool): When multiple extracts match the query by name, select the
+            first one (sorted by area ascending, then id) with a warning instead of raising
+            an error. Only used for string queries. Defaults to `True`.
+        geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union
+            metric for selecting the matching OSM extracts. Only used for geometry queries.
+            Defaults to 0.01.
+        allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
+            by any OSM extract. Only used for geometry queries. Defaults to `False`.
+
+    Returns:
+        Union[Path, list[tuple[OpenStreetMapExtract, Path]]]: Path to the downloaded
+            extract (string query) or list of (extract, path) pairs (geometry).
+    """
+    if isinstance(query, str):
+        return download_extract_by_query(
+            query,
+            source=source,
+            download_directory=download_directory,
+            progressbar=progressbar,
+            select_first_match=select_first_match,
+        )
+    return find_and_download_extracts_pbf_files(
+        query,
+        source=source,
+        download_directory=download_directory,
+        geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
+        allow_uncovered_geometry=allow_uncovered_geometry,
+        progressbar=progressbar,
+    )
