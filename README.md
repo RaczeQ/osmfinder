@@ -42,24 +42,42 @@ print(dl.download_paths)         # [Path('files/movisda-admin_monaco.osm.pbf')]
 print(dl.find_result.extract.id)    # 'Movisda-admin_MC'
 
 # --- by geometry ---
-geometry = box(7.40, 43.71, 7.44, 43.75)
-geometry = box(-0.20, 51.46, -0.01, 51.55)
 geometry = box(2.11, 48.77, 2.54, 48.98)
-result = osmfinder.find(geometry, source="Geofabrik")
+result = osmfinder.find(geometry)
 print(result)                       # multi-line OsmfinderGeometryResult with extracts, coverage, steps
 print(len(result.extracts))         # number of extracts covering the geometry
-print(result.extracts[0].id)        # 'Geofabrik_greater-london'
+print(result.extracts[0].id)        # 'BBBike_Paris'
 
 # Download by geometry
 dl = osmfinder.download(geometry, source="Geofabrik", download_directory="files")
 print(len(dl.download_paths))       # number of downloaded files
 print(dl.download_paths[0].name)    # 'geofabrik_europe_monaco.osm.pbf'
 
+# --- by point ---
+extracts = osmfinder.find_extracts_covering_point((-0.1276, 51.5074), source="Geofabrik")
+print(len(extracts))            # number of extracts covering central London
+print(extracts[0].id)           # 'Geofabrik_greater-london'
+
+# --- force single extract ---
+geometry = box(9.4, 47.2, 9.8, 47.6)
+result = osmfinder.find_smallest_containing_extracts(geometry)
+print(len(result.extracts))     # 4
+print(result.extracts[0].id)    # 'GEO2Day_europe_austria_vorarlberg'
+print(result.extracts[1].id)    # 'BBBike_Konstanz'
+print(result.extracts[2].id)    # 'GEO2Day_europe_switzerland_saint_gallen'
+print(result.extracts[3].id)    # 'Movisda-admin_LI'
+
+result = osmfinder.find_smallest_containing_extracts(
+    geometry, force_single_result=True
+)
+print(len(result.extracts))     # 1
+print(result.extracts[0].id)    # 'Movisda-grid_N47W009'
+
 # --- explore what's available ---
-osmfinder.display_available_extracts("Geofabrik")
+osmfinder.display_available_extracts(source="Geofabrik") # source is optional
 
 # Get all extracts as a list for programmatic use
-extracts = osmfinder.get_available_extracts("Geofabrik")
+extracts = osmfinder.get_available_extracts(source="Geofabrik") # source is optional
 for extract in extracts:
     print(extract.id, extract.file_name)
 ```
@@ -172,9 +190,9 @@ OsmfinderDownloadResult
 
 | Function | Search by | Returns |
 |---|---|---|
-| `get_extract_by_query` / `find` | name / id | `OsmfinderQueryResult` |
+| `get_extract_by_query` | name / id | `OsmfinderQueryResult` |
 | `get_available_extracts` | — | `list[OpenStreetMapExtract]` |
-| `download_extract_by_query` / `download` | name / id | `OsmfinderDownloadResult` |
+| `download_extract_by_query` | name / id | `OsmfinderDownloadResult` |
 | `find_smallest_containing_extracts` | geometry | `OsmfinderGeometryResult` |
 | `find_and_download_extracts_pbf_files` | geometry | `OsmfinderDownloadResult` |
 | `download_extracts_pbf_files` | list of extracts | `list[Path]` |

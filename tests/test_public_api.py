@@ -17,6 +17,7 @@ def test_public_api_exposed() -> None:
         "get_available_extracts",
         "download_extract_by_query",
         "find_smallest_containing_extracts",
+        "find_extracts_covering_point",
         "find_and_download_extracts_pbf_files",
         "display_available_extracts",
         "clear_osm_index_cache",
@@ -65,6 +66,13 @@ def test_smoke_end_to_end_query_flow(monkeypatch: pytest.MonkeyPatch, fake_index
     # Geometry query.
     result = osmfinder.find(fake_index.geometries[1], source="any")
     assert {extract.file_name for extract in result.extracts} == {"big_small"}
+
+    # Point query.
+    result = osmfinder.find_extracts_covering_point((1.0, 1.0), source="any")
+    assert isinstance(result, list)
+    assert len(result) == 2
+    assert result[0].file_name == "big_small"
+    assert result[1].file_name == "big"
 
 
 def test_fuzzy_source_name_parsing() -> None:

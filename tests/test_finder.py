@@ -22,6 +22,7 @@ from osmfinder.exceptions import (
 from osmfinder.finder import (
     _get_index_for_sources,
     _resolve_extract_sources,
+    find_extracts_covering_point,
     find_smallest_containing_extracts,
     get_extract_by_query,
 )
@@ -906,3 +907,157 @@ def test_force_single_result_falls_back_to_complete_cover(mocker: MockerFixture)
     assert len(result.extracts) == 1
     assert result.extracts[0].id == "extract_huge"
     assert result.steps[0].reason == "complete_cover"
+
+
+def test_find_extracts_covering_point_returns_matching_extracts(mocker: MockerFixture) -> None:
+    """Test if find_extracts_covering_point returns extracts that contain the point."""
+    index = _index_from_extracts(
+        [
+            {
+                "id": "big",
+                "name": "Big",
+                "parent": "root",
+                "geometry": box(0, 0, 10, 10),
+            },
+            {
+                "id": "small",
+                "name": "Small",
+                "parent": "root",
+                "geometry": box(0, 0, 2, 2),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    point_inside_both = (1.0, 1.0)
+    result = find_extracts_covering_point(point_inside_both)
+    assert len(result) == 2
+    assert result[0].id == "small"
+    assert result[1].id == "big"
+
+
+def test_find_extracts_covering_point_returns_smallest_first(mocker: MockerFixture) -> None:
+    """Test if results are sorted from smallest to biggest by area."""
+    index = _index_from_records(
+        [
+            {
+                "id": "huge",
+                "name": "Huge",
+                "parent": "root",
+                "url": "http://x/huge.pbf",
+                "geometry": box(0, 0, 10, 10),
+                "area": 100.0,
+            },
+            {
+                "id": "medium",
+                "name": "Medium",
+                "parent": "root",
+                "url": "http://x/medium.pbf",
+                "geometry": box(0, 0, 5, 5),
+                "area": 25.0,
+            },
+            {
+                "id": "tiny",
+                "name": "Tiny",
+                "parent": "root",
+                "url": "http://x/tiny.pbf",
+                "geometry": box(0, 0, 1, 1),
+                "area": 1.0,
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_covering_point((0.5, 0.5))
+    assert [e.id for e in result] == ["tiny", "medium", "huge"]
+
+
+def test_find_extracts_covering_point_returns_empty_list_on_no_match(
+    mocker: MockerFixture,
+) -> None:
+    """Test if an empty list is returned when no extract covers the point."""
+    index = _index_from_records(
+        [
+            {
+                "id": "far_away",
+                "name": "Far away",
+                "parent": "root",
+                "url": "http://x/far.pbf",
+                "geometry": box(5, 5, 6, 6),
+                "area": 1.0,
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_covering_point((0.0, 0.0))
+    assert result == []
+
+
+def test_find_extracts_covering_point_with_shapely_point(mocker: MockerFixture) -> None:
+    """Test if find_extracts_covering_point works with a shapely Point."""
+    index = _index_from_records(
+        [
+            {
+                "id": "extract_a",
+                "name": "Extract A",
+                "parent": "root",
+                "url": "http://x/a.pbf",
+                "geometry": box(0, 0, 5, 5),
+                "area": 25.0,
+            },
+            {
+                "id": "extract_b",
+                "name": "Extract B",
+                "parent": "root",
+                "url": "http://x/b.pbf",
+                "geometry": box(3, 3, 8, 8),
+                "area": 30.0,
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    from shapely.geometry import Point
+
+    point = Point(4.0, 4.0)
+    result = find_extracts_covering_point(point)
+    assert len(result) == 2
+    assert result[0].id == "extract_a"
+    assert result[1].id == "extract_b"
+
+
+def test_find_extracts_covering_point_excluded_ids(mocker: MockerFixture) -> None:
+    """Test if excluded_extracts_ids are skipped."""
+    index = _index_from_extracts(
+        [
+            {
+                "id": "keep",
+                "name": "Keep",
+                "parent": "root",
+                "geometry": box(0, 0, 10, 10),
+            },
+            {
+                "id": "skip",
+                "name": "Skip",
+                "parent": "root",
+                "geometry": box(0, 0, 2, 2),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_covering_point((1.0, 1.0), excluded_extracts_ids={"skip"})
+    assert len(result) == 1
+    assert result[0].id == "keep"
+
+
+def test_find_extracts_covering_point_invalid_source_raises(mocker: MockerFixture) -> None:
+    """Test if an invalid source raises ValueError."""
+    mocker.patch(
+        "osmfinder.finder._resolve_extract_sources",
+        side_effect=ValueError("No OSM extracts source provided."),
+    )
+
+    with pytest.raises(ValueError, match="Unknown OSM extracts source"):
+        find_extracts_covering_point((0.0, 0.0), source="nonexistent")

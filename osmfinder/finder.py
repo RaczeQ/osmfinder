@@ -21,7 +21,7 @@ from requests.exceptions import RequestException
 from rich import get_console
 from rich import print as rprint
 from shapely import equals_exact, intersects, is_empty, unary_union
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from tqdm.contrib.concurrent import process_map
 
@@ -61,6 +61,7 @@ from osmfinder.sources.tree import get_available_extracts_as_rich_tree
 __all__ = [
     "download_extracts_pbf_files",
     "find_and_download_extracts_pbf_files",
+    "find_extracts_covering_point",
     "find_smallest_containing_extracts",
     "clear_osm_index_cache",
     "get_extract_by_query",
@@ -842,6 +843,90 @@ def find_smallest_containing_extracts(
         steps=steps,
         iou_threshold=geometry_coverage_iou_threshold,
     )
+
+
+@overload
+def find_extracts_covering_point(
+    point: tuple[float, float],
+    source: OsmExtractSourceLike = "any",
+    *,
+    excluded_extracts_ids: set[str] | None = None,
+) -> list[OpenStreetMapExtract]: ...
+
+
+@overload
+def find_extracts_covering_point(
+    point: Point,
+    source: OsmExtractSourceLike = "any",
+    *,
+    excluded_extracts_ids: set[str] | None = None,
+) -> list[OpenStreetMapExtract]: ...
+
+
+def find_extracts_covering_point(
+    point: tuple[float, float] | Point,
+    source: OsmExtractSourceLike = "any",
+    *,
+    excluded_extracts_ids: set[str] | None = None,
+) -> list[OpenStreetMapExtract]:
+    """
+    Find all extracts that contain a specific point.
+
+    Args:
+        point (tuple[float, float] | Point): A ``(lon, lat)`` coordinate tuple
+            or a shapely ``Point`` geometry. The tuple follows the ``(x, y)`` convention
+            used by GeoJSON and shapely, i.e. longitude first, latitude second.
+        source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
+            'BBBike', 'OSMfr', or an iterable / comma-separated string of those
+            (e.g. ['BBBike', 'OSM_fr'] or 'bbbike,osmfr'). Defaults to 'any'.
+        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
+            Useful for skipping extracts that are unavailable for download. Defaults to `None`.
+
+    Returns:
+        list[OpenStreetMapExtract]: List of extracts covering the point, sorted by area
+            from smallest to biggest. Returns an empty list if no extract covers the point.
+
+    Examples:
+        >>> import osmfinder
+        >>> # Query by (lon, lat) tuple
+        >>> extracts = osmfinder.find_extracts_covering_point(
+        ...     (7.42, 43.73), source="Geofabrik"
+        ... )
+        >>> len(extracts) >= 1
+        True
+        >>> extracts[0].id
+        'Geofabrik_monaco'
+        >>> # Query by shapely Point
+        >>> from shapely.geometry import Point
+        >>> extracts = osmfinder.find_extracts_covering_point(
+        ...     Point(7.42, 43.73), source="Geofabrik"
+        ... )
+        >>> len(extracts) >= 1
+        True
+    """
+    if isinstance(point, tuple):
+        lon, lat = point
+        point_geom = Point(lon, lat)
+    else:
+        point_geom = point
+
+    try:
+        index = _get_index_for_sources(source)
+    except ValueError as ex:
+        raise ValueError(f"Unknown OSM extracts source: {source}.") from ex
+
+    if excluded_extracts_ids:
+        index = index.filter_by_mask(~np.isin(index.ids, list(excluded_extracts_ids)))
+
+    candidate_indices = index.tree.query(point_geom)
+
+    matching: list[tuple[float, int]] = []
+    for idx in candidate_indices:
+        if intersects(index.geometries[idx], point_geom):
+            matching.append((index.areas[idx], idx))
+
+    matching.sort(key=lambda item: (item[0], str(index.ids[item[1]])))
+    return [index.get_extract_by_index(idx) for _, idx in matching]
 
 
 def _find_smallest_containing_extracts(
