@@ -215,13 +215,17 @@ def test_excluded_extracts_ids() -> None:
 
     geometry = geocode_to_geometry("Andorra")
 
-    extracts = find_smallest_containing_extracts(geometry, "geofabrik")
+    result = find_smallest_containing_extracts(geometry, "geofabrik")
+    extracts = result.extracts
     assert [extract.file_name for extract in extracts] == ["geofabrik_europe_andorra"]
 
     excluded_extracts_ids = {extracts[0].id}
-    fallback_extracts = find_smallest_containing_extracts(
-        geometry, "geofabrik", excluded_extracts_ids=excluded_extracts_ids
+    fallback_result = find_smallest_containing_extracts(
+        geometry,
+        source="geofabrik",
+        excluded_extracts_ids=excluded_extracts_ids,
     )
+    fallback_extracts = fallback_result.extracts
 
     fallback_extracts_ids = {extract.id for extract in fallback_extracts}
     assert excluded_extracts_ids.isdisjoint(fallback_extracts_ids)
@@ -258,8 +262,8 @@ def test_select_first_match(mocker: MockerFixture) -> None:
 
     # Default (True): selects the smallest-area match (osmfr, box 0,0,1,1) and warns.
     with pytest.warns(OsmExtractMultipleMatchesWarning):
-        extract = get_extract_by_query("Vatican City")
-    assert extract.id == "osmfr_x_vatican_city"
+        result = get_extract_by_query("Vatican City")
+    assert result.extract.id == "osmfr_x_vatican_city"
 
     # False: raises as before.
     with pytest.raises(OsmExtractMultipleMatchesError):
@@ -268,7 +272,7 @@ def test_select_first_match(mocker: MockerFixture) -> None:
     # Single match: no warning regardless.
     with warnings.catch_warnings():
         warnings.simplefilter("error", OsmExtractMultipleMatchesWarning)
-        assert get_extract_by_query("enfield").id == "Geofabrik_enfield"
+        assert get_extract_by_query("enfield").extract.id == "Geofabrik_enfield"
 
 
 @pytest.mark.parametrize(
@@ -379,9 +383,9 @@ def test_extracts_finding(
     """Test if extracts finding by name works."""
     with expectation as exception_info:
         # select_first_match=False so multiple matches still raise.
-        extract = get_extract_by_query(query, source, select_first_match=False)
+        result = get_extract_by_query(query, source, select_first_match=False)
         # if properly found - check id
-        assert extract.id == matched_id
+        assert result.extract.id == matched_id
 
     # if threw exception - check resulting arrays
     if exception_info is not None:
@@ -424,7 +428,7 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
                 " 12.455878610023916 41.901790362263796, 12.455878610023916 41.904910802544634,"
                 " 12.450637854252449 41.904910802544634))"
             ),
-            "Movisda-admin_VA",
+            "GEO2Day_europe_vatican_city",
         ),
         (
             "Geofabrik",
@@ -480,9 +484,9 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
 )
 def test_single_smallest_extract(source: str, geometry: Any, expected_extract_id: str) -> None:
     """Test if extracts matching works correctly for geometries within borders."""
-    extracts = find_smallest_containing_extracts(geometry, source)
-    assert len(extracts) == 1
-    assert extracts[0].id == expected_extract_id, f"{extracts[0].id} vs {expected_extract_id}"
+    result = find_smallest_containing_extracts(geometry, source)
+    assert len(result.extracts) == 1
+    assert result.extracts[0].id == expected_extract_id
 
 
 @pytest.mark.parametrize(
@@ -499,6 +503,9 @@ def test_single_smallest_extract(source: str, geometry: Any, expected_extract_id
             0.01,
             [
                 "osmfr_europe_andorra",
+                "osmfr_europe_france_midi_pyrenees_ariege",
+                "osmfr_europe_france_languedoc_roussillon_pyrenees_orientales",
+                "osmfr_europe_spain_catalunya_lleida",
             ],
         ),
         (
@@ -541,7 +548,35 @@ def test_multiple_smallest_extracts(
     expected_extract_file_names: list[str],
 ) -> None:
     """Test if extracts matching works correctly for geometries between borders."""
-    extracts = find_smallest_containing_extracts(
+    result = find_smallest_containing_extracts(
         geometry, source, geometry_coverage_iou_threshold=geometry_coverage_iou_threshold
     )
-    assert sorted(extract.file_name for extract in extracts) == sorted(expected_extract_file_names)
+    assert sorted(extract.file_name for extract in result.extracts) == sorted(
+        expected_extract_file_names
+    )
+
+
+def test_geometry_covering_step_reasons() -> None:
+    """Test if GeometryCoveringStep reasons are set correctly for all states."""
+    geometry = from_wkt("POLYGON ((9.8 47.2, 9.8 47.6, 9.4 47.6, 9.4 47.2, 9.8 47.2))")
+    result = find_smallest_containing_extracts(geometry, "any")
+    assert len(result.extracts) == 4
+    assert len(result.steps) == 5
+
+    reasons = {step.extract.id: (step.selected, step.reason) for step in result.steps}
+    assert reasons["GEO2Day_europe_austria_vorarlberg"] == (True, "first_extract")
+    assert reasons["GEO2Day_europe_switzerland_saint_gallen"] == (True, "selected")
+    assert reasons["Movisda-admin_LI"] == (True, "selected")
+    assert reasons["osmfr_europe_switzerland_thurgau"] == (False, "redundant")
+    assert reasons["BBBike_Konstanz"] == (True, "selected")
+
+
+def test_geometry_covering_step_low_iou() -> None:
+    """Test if low IoU extracts are marked with reason='low_iou'."""
+    geometry = box(7.40, 43.71, 7.44, 43.75)
+    result = find_smallest_containing_extracts(geometry, "Geofabrik")
+    low_iou_steps = [step for step in result.steps if step.reason == "low_iou"]
+    assert len(low_iou_steps) >= 1
+    for step in low_iou_steps:
+        assert step.selected is False
+        assert step.iou < 0.01

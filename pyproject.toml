@@ -81,6 +81,7 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "osmfinder"
 module-root = ""
+source-exclude = ["osmfinder/conftest.py"]
 
 [tool.black]
 line-length = 100

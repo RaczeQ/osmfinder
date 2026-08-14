@@ -58,12 +58,12 @@ def test_smoke_end_to_end_query_flow(monkeypatch: pytest.MonkeyPatch, fake_index
     monkeypatch.setattr(finder, "_get_index_for_sources", lambda *args: fake_index)
 
     # Name query.
-    extract = osmfinder.get_extract_by_query("Small")
-    assert extract.file_name == "big_small"
+    result = osmfinder.get_extract_by_query("Small")
+    assert result.extract.file_name == "big_small"
 
     # Geometry query.
-    results = osmfinder.find_smallest_containing_extracts(fake_index.geometries[1], source="any")
-    assert {extract.file_name for extract in results} == {"big_small"}
+    result = osmfinder.find(fake_index.geometries[1], source="any")
+    assert {extract.file_name for extract in result.extracts} == {"big_small"}
 
 
 def test_fuzzy_source_name_parsing() -> None:
@@ -92,9 +92,9 @@ def test_fuzzy_geometry_queries(monkeypatch: pytest.MonkeyPatch, fake_index) -> 
         size = rng.uniform(0.01, 1.0)
         geometry = box(x, y, x + size, y + size)
 
-        results = osmfinder.find_smallest_containing_extracts(geometry, source="any")
-        assert isinstance(results, list)
-        assert all(extract.file_name in {"big", "big_small"} for extract in results)
+        results = osmfinder.find(geometry, source="any")
+        assert isinstance(results.extracts, list)
+        assert all(extract.file_name in {"big", "big_small"} for extract in results.extracts)
 
 
 def test_fuzzy_extract_name_queries(monkeypatch: pytest.MonkeyPatch, fake_index) -> None:
@@ -107,7 +107,7 @@ def test_fuzzy_extract_name_queries(monkeypatch: pytest.MonkeyPatch, fake_index)
     for _ in range(50):
         query = "".join(rng.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(rng.randint(1, 8)))
         try:
-            extract = osmfinder.get_extract_by_query(query, select_first_match=False)
+            result = osmfinder.get_extract_by_query(query, select_first_match=False)
         except (OsmExtractZeroMatchesError, OsmExtractMultipleMatchesError):
             continue
-        assert extract.file_name in {"big", "big_small"}
+        assert result.extract.file_name in {"big", "big_small"}

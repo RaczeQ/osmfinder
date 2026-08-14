@@ -7,6 +7,7 @@ import pytest
 from pytest_mock import MockerFixture
 from shapely import box
 
+import osmfinder
 from osmfinder._typing import OpenStreetMapExtract
 from osmfinder.exceptions import (
     OsmExtractMultipleMatchesWarning,
@@ -18,6 +19,7 @@ from osmfinder.finder import (
     download_extract_by_query,
     download_extracts_pbf_files,
     find_and_download_extracts_pbf_files,
+    find_smallest_containing_extracts,
 )
 from tests._helpers import _index_from_records
 
@@ -32,7 +34,7 @@ def test_find_and_download_excludes_unavailable_extracts(mocker: MockerFixture) 
     from osmfinder.finder import find_smallest_containing_extracts
 
     matching_extracts = find_smallest_containing_extracts(geometry, "geofabrik")
-    failing_extract_id = matching_extracts[0].id
+    failing_extract_id = matching_extracts.extracts[0].id
 
     def fake_download(
         extract: OpenStreetMapExtract, download_directory: Path, progressbar: bool = True
@@ -46,10 +48,10 @@ def test_find_and_download_excludes_unavailable_extracts(mocker: MockerFixture) 
     with tempfile.TemporaryDirectory() as tmp_dir, pytest.warns(OsmExtractUnavailableWarning):
         result = find_and_download_extracts_pbf_files(geometry, "geofabrik", tmp_dir)
 
-    result_extracts_ids = {extract.id for extract, _ in result}
+    result_extracts_ids = {extract.id for extract in result.find_result.extracts}
     assert failing_extract_id not in result_extracts_ids
-    assert result
-    assert all(isinstance(pbf_path, Path) for _, pbf_path in result)
+    assert result.download_paths
+    assert all(isinstance(pbf_path, Path) for pbf_path in result.download_paths)
 
 
 def test_download_extracts_pbf_files_raises_on_unavailable(mocker: MockerFixture) -> None:
@@ -119,9 +121,13 @@ def test_download_extract_by_query_redundancy(mocker: MockerFixture) -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         with pytest.warns(OsmExtractMultipleMatchesWarning):
             with pytest.warns(OsmExtractUnavailableWarning):
-                path = download_extract_by_query("Vatican City", download_directory=tmp_dir)
+                result = osmfinder.download("Vatican City", download_directory=tmp_dir)
     # Fell back to the second match.
-    assert path.name == "geo2day_vatican_city.osm.pbf"
+    assert len(result.download_paths) == 1
+    assert result.download_paths[0].name == "geo2day_vatican_city.osm.pbf"
+    # After fallback, find_result contains the final selected extract (geo2day_vc)
+    assert result.find_result.extracts[0].id == "geo2day_vc"
+    assert result.download_paths[0].name == "geo2day_vatican_city.osm.pbf"
 
 
 def test_download_extract_by_query_all_unavailable(mocker: MockerFixture) -> None:
@@ -141,7 +147,7 @@ def test_download_extract_by_query_all_unavailable(mocker: MockerFixture) -> Non
             pytest.warns(OsmExtractUnavailableWarning),
             pytest.raises(OsmExtractsUnavailableError) as exc_info,
         ):
-            download_extract_by_query("Vatican City", download_directory=tmp_dir)
+            osmfinder.download("Vatican City", download_directory=tmp_dir)
     assert set(exc_info.value.matching_full_names) == {
         "geo2day_vatican_city",
         "osmfr_vatican_city",
@@ -156,3 +162,53 @@ def test_download_extract_by_query_zero_match(mocker: MockerFixture) -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         with pytest.raises(OsmExtractZeroMatchesError):
             download_extract_by_query("totally_nonexistent_extract", download_directory=tmp_dir)
+
+
+def test_find_and_download_unavailable_extracts_list(mocker: MockerFixture) -> None:
+    """Test if find_and_download returns unavailable_extracts list."""
+    from requests.exceptions import HTTPError
+    from rq_geo_toolkit.geocode import geocode_to_geometry
+
+    geometry = geocode_to_geometry("Andorra")
+    matching_extracts = find_smallest_containing_extracts(geometry, "geofabrik")
+    failing_extract_id = matching_extracts.extracts[0].id
+
+    def fake_download(
+        extract: OpenStreetMapExtract, download_directory: Path, progressbar: bool = True
+    ) -> Path:
+        if extract.id == failing_extract_id:
+            raise HTTPError("Extract unavailable")
+        return Path(download_directory) / f"{extract.file_name}.osm.pbf"
+
+    mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
+
+    with tempfile.TemporaryDirectory() as tmp_dir, pytest.warns(OsmExtractUnavailableWarning):
+        result = find_and_download_extracts_pbf_files(geometry, "geofabrik", tmp_dir)
+
+    assert len(result.unavailable_extracts) == 1
+    assert result.unavailable_extracts[0].id == failing_extract_id
+
+
+def test_download_extract_by_query_unavailable_list(mocker: MockerFixture) -> None:
+    """Test if download_extract_by_query returns unavailable_extracts list."""
+    from requests.exceptions import ConnectionError as RequestsConnectionError
+
+    index = _two_vatican_city_index()
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    def fake_download(
+        extract: OpenStreetMapExtract, download_directory: Path, progressbar: bool = True
+    ) -> Path:
+        if extract.id == "osmfr_vc":
+            raise RequestsConnectionError("offline")
+        return Path(download_directory) / f"{extract.file_name}.osm.pbf"
+
+    mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        with pytest.warns(OsmExtractMultipleMatchesWarning):
+            with pytest.warns(OsmExtractUnavailableWarning):
+                result = osmfinder.download("Vatican City", download_directory=tmp_dir)
+
+    assert len(result.unavailable_extracts) == 1
+    assert result.unavailable_extracts[0].id == "osmfr_vc"

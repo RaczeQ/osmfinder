@@ -141,7 +141,16 @@ def clear_osm_index_cache(extract_source: OsmExtractSource) -> None: ...
 
 
 def clear_osm_index_cache(extract_source: OsmExtractSource | None = None) -> None:
-    """Clear cached osm index."""
+    """
+    Clear cached osm index.
+
+    Examples:
+        >>> import osmfinder
+        >>> osmfinder.clear_osm_index_cache()  # doctest: +SKIP
+        >>> # Clears all cached indexes.
+        >>> osmfinder.clear_osm_index_cache(osmfinder.OsmExtractSource.geofabrik)  # doctest: +SKIP
+        >>> # Clears only the Geofabrik cache.
+    """
     if extract_source is not None:
         extract_sources = [extract_source]
     else:

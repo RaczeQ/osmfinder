@@ -1,18 +1,14 @@
-"""Shared fixtures and helpers for the osmfinder test suite."""
+"""Pytest configuration and fixtures for doctests in the osmfinder package."""
 
 from pathlib import Path
 from unittest.mock import patch
 
-import numpy as np
-import pytest
-from shapely.geometry import box
-
-from osmfinder._typing import OsmExtractsIndex
+from osmfinder._typing import OpenStreetMapExtract
 
 
 def _mock_download_precalculated_index_from_github(destination_path: Path) -> bool:
     """Copy a local frozen test index instead of downloading from GitHub."""
-    test_index_dir = Path(__file__).parent / "test_indexes"
+    test_index_dir = Path(__file__).parent.parent / "tests" / "test_indexes"
     src = test_index_dir / destination_path.name
     if src.exists():
         import shutil
@@ -23,7 +19,9 @@ def _mock_download_precalculated_index_from_github(destination_path: Path) -> bo
 
 
 def _mock_download_single_extract(
-    extract, download_directory: Path, progressbar: bool = True
+    extract: OpenStreetMapExtract,
+    download_directory: Path,
+    progressbar: bool = True,
 ) -> Path:
     """Create an empty PBF file instead of downloading from the internet."""
     download_directory = Path(download_directory)
@@ -42,20 +40,3 @@ patch(
     "osmfinder.finder._download_single_extract",
     side_effect=_mock_download_single_extract,
 ).start()
-
-
-@pytest.fixture
-def fake_index() -> OsmExtractsIndex:
-    """A tiny two-extract index: a big region containing a small nested one."""
-    return OsmExtractsIndex(
-        ids=np.array(["a", "b"], dtype=object),
-        geometries=np.array([box(0, 0, 10, 10), box(0, 0, 2, 2)], dtype=object),
-        areas=np.array([100.0, 4.0]),
-        file_names=np.array(["big", "big_small"], dtype=object),
-        names=np.array(["Big", "Small"], dtype=object),
-        parents=np.array(["root", "a"], dtype=object),
-        urls=np.array(
-            ["http://example.test/big.osm.pbf", "http://example.test/small.osm.pbf"],
-            dtype=object,
-        ),
-    )

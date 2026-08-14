@@ -33,7 +33,7 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
         args: ['--maxkb=1000']
-        exclude: '^precalculated_indexes/'
+        exclude: '^(precalculated_indexes|tests/test_indexes)/'
       - id: detect-private-key
 
 ci:
