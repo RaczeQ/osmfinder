@@ -580,3 +580,329 @@ def test_geometry_covering_step_low_iou() -> None:
     for step in low_iou_steps:
         assert step.selected is False
         assert step.iou < 0.01
+
+
+def test_force_single_result_complete_coverage(mocker: MockerFixture) -> None:
+    """Test that force_single_result returns one extract that completely covers the geometry."""
+    geometry = box(0, 0, 2, 2)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_a",
+                "name": "Extract A",
+                "parent": "root",
+                "geometry": box(0, 0, 10, 10),
+            },
+            {
+                "id": "extract_b",
+                "name": "Extract B",
+                "parent": "root",
+                "geometry": box(0, 0, 3, 3),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    result = find_smallest_containing_extracts(geometry, force_single_result=True)
+    assert len(result.extracts) == 1
+    assert result.extracts[0].id == "extract_b"
+
+
+def test_force_single_result_default_threshold(mocker: MockerFixture) -> None:
+    """Test force_single_result with default 0.99 threshold returns one extract."""
+    geometry = box(0, 0, 2, 2)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_a",
+                "name": "Extract A",
+                "parent": "root",
+                "geometry": box(0, 0, 10, 10),
+            },
+            {
+                "id": "extract_b",
+                "name": "Extract B",
+                "parent": "root",
+                "geometry": box(0, 0, 3, 3),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    result = find_smallest_containing_extracts(geometry, force_single_result=True)
+    assert len(result.extracts) == 1
+    assert result.extracts[0].id == "extract_b"
+
+
+def test_force_single_result_selects_highest_iou(mocker: MockerFixture) -> None:
+    """Test that force_single_result returns the extract with the highest IoU."""
+    geometry = box(0, 0, 2, 2)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_small",
+                "name": "Small extract",
+                "parent": "root",
+                "geometry": box(0, 0, 3, 3),
+            },
+            {
+                "id": "extract_tight",
+                "name": "Tight extract",
+                "parent": "root",
+                "geometry": box(0, 0, 2.1, 2.1),
+            },
+            {
+                "id": "extract_large",
+                "name": "Large extract",
+                "parent": "root",
+                "geometry": box(0, 0, 10, 10),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    result = find_smallest_containing_extracts(geometry, force_single_result=True)
+    assert len(result.extracts) == 1
+    assert result.extracts[0].id == "extract_tight"
+    assert result.steps[0].iou > 0.9
+
+
+def test_force_single_result_with_095_threshold(mocker: MockerFixture) -> None:
+    """Test force_single_result with 0.95 threshold is less strict than 0.99."""
+    geometry = box(0, 0, 2, 2)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_small",
+                "name": "Small extract",
+                "parent": "root",
+                "geometry": box(0, 0, 3, 3),
+            },
+            {
+                "id": "extract_tight",
+                "name": "Tight extract",
+                "parent": "root",
+                "geometry": box(0, 0, 2.1, 2.1),
+            },
+            {
+                "id": "extract_large",
+                "name": "Large extract",
+                "parent": "root",
+                "geometry": box(0, 0, 10, 10),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    result_099 = find_smallest_containing_extracts(
+        geometry, force_single_result=True, single_result_iou_threshold=0.99
+    )
+    result_095 = find_smallest_containing_extracts(
+        geometry, force_single_result=True, single_result_iou_threshold=0.95
+    )
+    assert len(result_099.extracts) == 1
+    assert len(result_095.extracts) == 1
+
+
+def test_force_single_result_threshold_rejects_low_iou(mocker: MockerFixture) -> None:
+    """Test that force_single_result with strict threshold rejects low IoU extracts."""
+    geometry = box(0, 0, 2, 2)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_tight",
+                "name": "Tight extract",
+                "parent": "root",
+                "geometry": box(0, 0, 2.1, 2.1),
+            },
+            {
+                "id": "extract_large",
+                "name": "Large extract",
+                "parent": "root",
+                "geometry": box(0, 0, 10, 10),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    result_strict = find_smallest_containing_extracts(
+        geometry, force_single_result=True, single_result_iou_threshold=0.99
+    )
+    result_relaxed = find_smallest_containing_extracts(
+        geometry, force_single_result=True, single_result_iou_threshold=0.40
+    )
+    assert len(result_strict.extracts) == 1
+    assert result_strict.extracts[0].id == "extract_tight"
+    assert len(result_relaxed.extracts) == 1
+    assert result_relaxed.extracts[0].id == "extract_tight"
+
+
+def test_force_single_result_no_extract_above_threshold(mocker: MockerFixture) -> None:
+    """Test that force_single_result raises when no extract meets the threshold."""
+    geometry = box(0, 0, 2, 2)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_far",
+                "name": "Far extract",
+                "parent": "root",
+                "geometry": box(10, 10, 12, 12),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    with pytest.raises(GeometryNotCoveredError):
+        find_smallest_containing_extracts(geometry, force_single_result=True)
+
+
+def test_force_single_result_invalid_threshold_raises(mocker: MockerFixture) -> None:
+    """Test that invalid single_result_iou_threshold raises ValueError."""
+    geometry = box(0, 0, 1, 1)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_one",
+                "name": "Extract One",
+                "parent": "root",
+                "geometry": box(0, 0, 1, 1),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    with pytest.raises(ValueError):
+        find_smallest_containing_extracts(
+            geometry, force_single_result=True, single_result_iou_threshold=-0.1
+        )
+    with pytest.raises(ValueError):
+        find_smallest_containing_extracts(
+            geometry, force_single_result=True, single_result_iou_threshold=1.5
+        )
+
+
+def test_force_single_result_false_keeps_multi_result(mocker: MockerFixture) -> None:
+    """Test that force_single_result=False preserves existing multi-result behavior."""
+    geometry = from_wkt("POLYGON ((9.8 47.2, 9.8 47.6, 9.4 47.6, 9.4 47.2, 9.8 47.2))")
+    result_default = find_smallest_containing_extracts(geometry, "any")
+    result_forced = find_smallest_containing_extracts(geometry, "any", force_single_result=False)
+    assert len(result_default.extracts) == len(result_forced.extracts)
+
+
+def test_force_single_result_prefers_non_complete_above_threshold(mocker: MockerFixture) -> None:
+    """Test non-complete cover above threshold is preferred when uncovered geometry is allowed."""
+    geometry = box(0, 0, 2, 2)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_huge",
+                "name": "Huge extract",
+                "parent": "root",
+                "geometry": box(0, 0, 10, 10),
+            },
+            {
+                "id": "extract_tight",
+                "name": "Tight extract",
+                "parent": "root",
+                "geometry": box(0, 0, 2.09, 1.99),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    result = find_smallest_containing_extracts(
+        geometry,
+        force_single_result=True,
+        single_result_iou_threshold=0.90,
+        allow_uncovered_geometry=True,
+    )
+    assert len(result.extracts) == 1
+    assert result.extracts[0].id == "extract_tight"
+    assert result.steps[0].reason == "single_result"
+
+
+def test_force_single_result_smallest_complete_cover(mocker: MockerFixture) -> None:
+    """Test that smallest complete cover is selected when no non-complete above threshold."""
+    geometry = box(0, 0, 2, 2)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_huge",
+                "name": "Huge extract",
+                "parent": "root",
+                "geometry": box(0, 0, 10, 10),
+            },
+            {
+                "id": "extract_medium",
+                "name": "Medium extract",
+                "parent": "root",
+                "geometry": box(0, 0, 5, 5),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    result = find_smallest_containing_extracts(
+        geometry, force_single_result=True, single_result_iou_threshold=0.99
+    )
+    assert len(result.extracts) == 1
+    assert result.extracts[0].id == "extract_medium"
+    assert result.steps[0].reason == "complete_cover"
+
+
+def test_force_single_result_warns_on_much_larger_extract(mocker: MockerFixture) -> None:
+    """Test that a warning is emitted when selected extract is much larger than query."""
+    geometry = box(0, 0, 2, 2)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_huge",
+                "name": "Huge extract",
+                "parent": "root",
+                "geometry": box(0, 0, 10, 10),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    with pytest.warns(GeometryNotCoveredWarning, match="is .*x larger than the query geometry"):
+        find_smallest_containing_extracts(geometry, force_single_result=True)
+
+
+def test_force_single_result_allow_uncovered_geometry_no_candidates(mocker: MockerFixture) -> None:
+    """Test allow_uncovered_geometry=True raises when no candidates exist."""
+    geometry = box(0, 0, 2, 2)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_far",
+                "name": "Far extract",
+                "parent": "root",
+                "geometry": box(10, 10, 12, 12),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    with pytest.raises(GeometryNotCoveredError, match="No OSM extracts intersect"):
+        find_smallest_containing_extracts(
+            geometry, force_single_result=True, allow_uncovered_geometry=True
+        )
+
+
+def test_force_single_result_falls_back_to_complete_cover(mocker: MockerFixture) -> None:
+    """
+    Test allow_uncovered_geometry=True falls back to complete cover.
+
+    When no partial candidate meets the threshold, the smallest fully containing extract is used.
+    """
+    geometry = box(0, 0, 2, 2)
+    index = _index_from_extracts(
+        [
+            {
+                "id": "extract_huge",
+                "name": "Huge extract",
+                "parent": "root",
+                "geometry": box(0, 0, 10, 10),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    result = find_smallest_containing_extracts(
+        geometry,
+        force_single_result=True,
+        allow_uncovered_geometry=True,
+        single_result_iou_threshold=0.99,
+    )
+    assert len(result.extracts) == 1
+    assert result.extracts[0].id == "extract_huge"
+    assert result.steps[0].reason == "complete_cover"

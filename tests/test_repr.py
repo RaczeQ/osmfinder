@@ -167,7 +167,7 @@ def test_geometry_repr_empty_extracts_and_steps() -> None:
 
 
 def test_step_repr_selected() -> None:
-    """A selected step shows selected status and reason."""
+    """A selected step shows a compact one-liner."""
     extract = _make_extract("x", "Xray")
     step = GeometryCoveringStep(
         extract=extract,
@@ -178,12 +178,11 @@ def test_step_repr_selected() -> None:
         intersection_geometry=box(0, 0, 1, 1),
     )
     repr_str = repr(step)
-    assert "x — Xray" in repr_str
-    assert "iou: 0.9234, selected, first_extract" in repr_str
+    assert repr_str == "GeometryCoveringStep(x, Xray)"
 
 
 def test_step_repr_skipped() -> None:
-    """A skipped step shows skipped status and reason."""
+    """A skipped step shows a compact one-liner."""
     extract = _make_extract("y", "Yankee")
     step = GeometryCoveringStep(
         extract=extract,
@@ -194,12 +193,11 @@ def test_step_repr_skipped() -> None:
         intersection_geometry=box(0, 0, 1, 1),
     )
     repr_str = repr(step)
-    assert "y — Yankee" in repr_str
-    assert "iou: 0.0012, skipped, low_iou" in repr_str
+    assert repr_str == "GeometryCoveringStep(y, Yankee)"
 
 
 def test_step_repr_indented() -> None:
-    """Geometry result indents each line of the step repr by 4 spaces."""
+    """Geometry result indents each line of the step details by 4 spaces."""
     extract = _make_extract("z", "Zulu")
     step = GeometryCoveringStep(
         extract=extract,
@@ -209,10 +207,18 @@ def test_step_repr_indented() -> None:
         geometry_to_cover=box(0, 0, 1, 1),
         intersection_geometry=box(0, 0, 1, 1),
     )
-    step_repr = repr(step)
-    lines = step_repr.split("\n")
-    assert lines[0] == "z — Zulu"
-    assert lines[1] == "  iou: 0.5000, selected, selected"
+    result = OsmfinderGeometryResult(
+        extracts=[],
+        sources_used=[],
+        input_geometry=box(0, 0, 1, 1),
+        covered_geometry=box(0, 0, 0, 0),
+        uncovered_geometry=box(0, 0, 1, 1),
+        steps=[step],
+        iou_threshold=0.01,
+    )
+    repr_str = repr(result)
+    assert "    z — Zulu" in repr_str
+    assert "      iou: 0.5000, selected, selected" in repr_str
 
 
 def test_download_repr_basic() -> None:

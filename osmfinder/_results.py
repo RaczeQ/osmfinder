@@ -114,7 +114,10 @@ class OsmfinderGeometryResult(OsmfinderResult):
 
         steps_lines = (
             "\n".join(
-                "\n".join(f"    {line}" for line in repr(step).split("\n")) for step in self.steps
+                f"    {step.extract.id} — {step.extract.name}\n"
+                f"      iou: {step.iou:.4f}, "
+                f"{'selected' if step.selected else 'skipped'}, {step.reason}"
+                for step in self.steps
             )
             if self.steps
             else "    none"
@@ -142,11 +145,7 @@ class GeometryCoveringStep:
     intersection_geometry: "BaseGeometry"
 
     def __repr__(self) -> str:
-        status = "selected" if self.selected else "skipped"
-        return (
-            f"{self.extract.id} — {self.extract.name}\n"
-            f"  iou: {self.iou:.4f}, {status}, {self.reason}"
-        )
+        return f"GeometryCoveringStep({self.extract.id}, {self.extract.name})"
 
 
 @dataclass

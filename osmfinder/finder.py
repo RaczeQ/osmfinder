@@ -560,6 +560,8 @@ def find_and_download_extracts_pbf_files(
     download_directory: str | Path = "files",
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
+    force_single_result: bool = False,
+    single_result_iou_threshold: float = 0.99,
     progressbar: bool = True,
 ) -> OsmfinderDownloadResult:
     """
@@ -583,6 +585,16 @@ def find_and_download_extracts_pbf_files(
             Defaults to 0.01.
         allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
             by any OSM extract. Defaults to `False`.
+        force_single_result (bool): When ``True``, return only the smallest extract that best covers
+            the geometry. If ``allow_uncovered_geometry`` is ``False``, the smallest fully
+            containing extract is returned. If ``allow_uncovered_geometry`` is ``True``, the
+            extract with the highest IoU above ``single_result_iou_threshold`` is returned.
+            If no candidate meets the threshold, the smallest fully containing extract is used as
+            a fallback.
+            Defaults to ``False``.
+        single_result_iou_threshold (float): Minimal IoU value for selecting a single result when
+            ``force_single_result`` is ``True`` and ``allow_uncovered_geometry`` is ``True``.
+            Defaults to 0.99.
         progressbar (bool, optional): Show progress bar. Defaults to True.
 
     Raises:
@@ -616,6 +628,8 @@ def find_and_download_extracts_pbf_files(
             geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
             allow_uncovered_geometry=allow_uncovered_geometry,
             excluded_extracts_ids=excluded_extracts_ids,
+            force_single_result=force_single_result,
+            single_result_iou_threshold=single_result_iou_threshold,
         )
 
         downloaded, unavailable = _download_extracts_pbf_files(
@@ -691,6 +705,8 @@ def find_smallest_containing_extracts(
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
     excluded_extracts_ids: set[str] | None = None,
+    force_single_result: bool = False,
+    single_result_iou_threshold: float = 0.99,
 ) -> OsmfinderGeometryResult:
     """
     Find smallest extracts from a given OSM source that contains given polygon.
@@ -715,6 +731,16 @@ def find_smallest_containing_extracts(
             by any OSM extract. Defaults to `False`.
         excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
             Useful for skipping extracts that are unavailable for download. Defaults to `None`.
+        force_single_result (bool): When ``True``, return only the smallest extract that best covers
+            the geometry. If ``allow_uncovered_geometry`` is ``False``, the smallest fully
+            containing extract is returned. If ``allow_uncovered_geometry`` is ``True``, the
+            extract with the highest IoU above ``single_result_iou_threshold`` is returned.
+            If no candidate meets the threshold, the smallest fully containing extract is used as
+            a fallback.
+            Defaults to ``False``.
+        single_result_iou_threshold (float): Minimal IoU value for selecting a single result when
+            ``force_single_result`` is ``True`` and ``allow_uncovered_geometry`` is ``True``.
+            Defaults to 0.99.
 
     Returns:
         List[OpenStreetMapExtract]: List of extracts name, URL to download it and boundary polygon.
@@ -740,6 +766,8 @@ def find_smallest_containing_extracts(
         geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
         allow_uncovered_geometry=allow_uncovered_geometry,
         excluded_extracts_ids=excluded_extracts_ids,
+        force_single_result=force_single_result,
+        single_result_iou_threshold=single_result_iou_threshold,
     )
 
     final_ids = {e.id for e in extracts}
@@ -776,6 +804,8 @@ def _find_smallest_containing_extracts(
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
     excluded_extracts_ids: set[str] | None = None,
+    force_single_result: bool = False,
+    single_result_iou_threshold: float = 0.99,
 ) -> tuple[list[OpenStreetMapExtract], list[GeometryCoveringStep]]:
     """
     Find smallest set of extracts covering a given geometry.
@@ -806,6 +836,16 @@ def _find_smallest_containing_extracts(
             by any OSM extract. Defaults to `False`.
         excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
             Useful for skipping extracts that are unavailable for download. Defaults to `None`.
+        force_single_result (bool): When ``True``, return only the smallest extract that best covers
+            the geometry. If ``allow_uncovered_geometry`` is ``False``, the smallest fully
+            containing extract is returned. If ``allow_uncovered_geometry`` is ``True``, the
+            extract with the highest IoU above ``single_result_iou_threshold`` is returned.
+            If no candidate meets the threshold, the smallest fully containing extract is used as
+            a fallback.
+            Defaults to ``False``.
+        single_result_iou_threshold (float): Minimal IoU value for selecting a single result when
+            ``force_single_result`` is ``True`` and ``allow_uncovered_geometry`` is ``True``.
+            Defaults to 0.99.
 
     Returns:
         List[OpenStreetMapExtract]: List of extracts covering a given geometry.
@@ -814,6 +854,19 @@ def _find_smallest_containing_extracts(
         polygons_index = polygons_index.filter_by_mask(
             ~np.isin(polygons_index.ids, list(excluded_extracts_ids))
         )
+
+    if force_single_result and (single_result_iou_threshold < 0 or single_result_iou_threshold > 1):
+        raise ValueError("single_result_iou_threshold is outside required bounds [0, 1]")
+
+    if force_single_result:
+        selected_id, step = _find_single_extract_for_geometry(
+            geometry=geometry,
+            polygons_index=polygons_index,
+            iou_threshold=single_result_iou_threshold,
+            allow_uncovered_geometry=allow_uncovered_geometry,
+        )
+        extract = _get_extract_by_id(polygons_index, selected_id)
+        return [extract], [step]
 
     if num_of_multiprocessing_workers == 0:
         num_of_multiprocessing_workers = 1
@@ -979,6 +1032,98 @@ def _select_covering_extracts(
             )
 
     return selected_extracts_ids, steps
+
+
+def _find_single_extract_for_geometry(
+    geometry: BaseGeometry,
+    polygons_index: OsmExtractsIndex,
+    iou_threshold: float = 0.99,
+    allow_uncovered_geometry: bool = False,
+) -> tuple[str, GeometryCoveringStep]:
+    """Find a single extract that best covers the given geometry."""
+    candidate_indices = polygons_index.tree.query(geometry)
+    candidate_indices = [
+        idx
+        for idx in candidate_indices
+        if intersects(cast("BaseGeometry", polygons_index.geometries[idx]), geometry)
+    ]
+
+    if not candidate_indices:
+        raise GeometryNotCoveredError("No OSM extracts intersect the query geometry.")
+
+    geometry_area = _calculate_geodetic_area(geometry)
+
+    complete_cover_candidates: list[tuple[int, float, float]] = []
+    partial_candidates: list[tuple[int, float, float]] = []
+
+    for idx in candidate_indices:
+        extract_geometry = cast("BaseGeometry", polygons_index.geometries[idx])
+        extract_area = float(polygons_index.areas[idx])
+
+        if extract_geometry.covers(geometry):
+            iou = geometry_area / extract_area if extract_area > 0 else 1.0
+            complete_cover_candidates.append((int(idx), extract_area, iou))
+        else:
+            intersection_geometry = extract_geometry.intersection(geometry)
+            intersection_area = _calculate_geodetic_area(intersection_geometry)
+            iou = intersection_area / (extract_area + geometry_area - intersection_area)
+            partial_candidates.append((int(idx), extract_area, iou))
+
+    selected_idx: int | None = None
+    selected_area = 0.0
+    selected_iou = 0.0
+    selected_reason = ""
+
+    if allow_uncovered_geometry:
+        above_threshold = [
+            (idx, area, iou) for idx, area, iou in partial_candidates if iou >= iou_threshold
+        ]
+        if above_threshold:
+            selected_idx, selected_area, selected_iou = min(
+                above_threshold, key=lambda x: (-x[2], x[1])
+            )
+            selected_reason = "single_result"
+        elif complete_cover_candidates:
+            selected_idx, selected_area, selected_iou = min(
+                complete_cover_candidates, key=lambda x: x[1]
+            )
+            selected_reason = "complete_cover"
+        else:
+            raise GeometryNotCoveredError(
+                f"No extract meets the IoU threshold of {iou_threshold}"
+                " of fully contains the query geometry."
+            )
+    else:
+        if complete_cover_candidates:
+            selected_idx, selected_area, selected_iou = min(
+                complete_cover_candidates, key=lambda x: x[1]
+            )
+            selected_reason = "complete_cover"
+        else:
+            raise GeometryNotCoveredError("No extract fully contains the query geometry.")
+
+    selected_extract = polygons_index.get_extract_by_index(selected_idx)
+    selected_intersection = selected_extract.geometry.intersection(geometry)
+
+    if selected_iou < 0.05:
+        area_ratio = selected_area / geometry_area if geometry_area > 0 else float("inf")
+        if area_ratio > 2:
+            warnings.warn(
+                f"Selected extract '{selected_extract.file_name}' is {area_ratio:.1f}x "
+                f"larger than the query geometry (IoU={selected_iou:.4f}).",
+                GeometryNotCoveredWarning,
+                stacklevel=0,
+            )
+
+    step = GeometryCoveringStep(
+        extract=selected_extract,
+        iou=selected_iou,
+        selected=True,
+        reason=selected_reason,
+        geometry_to_cover=geometry,
+        intersection_geometry=selected_intersection,
+    )
+    return str(polygons_index.ids[selected_idx]), step
 
 
 def _get_extract_by_id(index: OsmExtractsIndex, extract_id: str) -> OpenStreetMapExtract:
@@ -1276,6 +1421,8 @@ def find(
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
     excluded_extracts_ids: set[str] | None = None,
+    force_single_result: bool = False,
+    single_result_iou_threshold: float = 0.99,
 ) -> OsmfinderGeometryResult: ...
 
 
@@ -1287,6 +1434,8 @@ def find(
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
     excluded_extracts_ids: set[str] | None = None,
+    force_single_result: bool = False,
+    single_result_iou_threshold: float = 0.99,
 ) -> OsmfinderQueryResult | OsmfinderGeometryResult:
     """
     Find an OSM extract by name or geometry.
@@ -1308,6 +1457,16 @@ def find(
             by any OSM extract. Only used for geometry queries. Defaults to `False`.
         excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
             Useful for skipping extracts that are unavailable for download. Defaults to `None`.
+        force_single_result (bool): When ``True``, return only the smallest extract that best covers
+            the geometry. If ``allow_uncovered_geometry`` is ``False``, the smallest fully
+            containing extract is returned. If ``allow_uncovered_geometry`` is ``True``, the
+            extract with the highest IoU above ``single_result_iou_threshold`` is returned.
+            If no candidate meets the threshold, the smallest fully containing extract is used as
+            a fallback.
+            Only used for geometry queries. Defaults to ``False``.
+        single_result_iou_threshold (float): Minimal IoU value for selecting a single result when
+            ``force_single_result`` is ``True`` and ``allow_uncovered_geometry`` is ``True``.
+            Only used for geometry queries. Defaults to 0.99.
 
     Returns:
         Union[OsmfinderQueryResult, OsmfinderGeometryResult]: Query result for string queries,
@@ -1347,6 +1506,8 @@ def find(
         geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
         allow_uncovered_geometry=allow_uncovered_geometry,
         excluded_extracts_ids=excluded_extracts_ids,
+        force_single_result=force_single_result,
+        single_result_iou_threshold=single_result_iou_threshold,
     )
 
 
@@ -1356,8 +1517,8 @@ def download(
     source: OsmExtractSourceLike = "any",
     *,
     download_directory: str | Path = "files",
-    progressbar: bool = True,
     select_first_match: bool = True,
+    progressbar: bool = True,
 ) -> OsmfinderDownloadResult: ...
 
 
@@ -1369,6 +1530,8 @@ def download(
     download_directory: str | Path = "files",
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
+    force_single_result: bool = False,
+    single_result_iou_threshold: float = 0.99,
     progressbar: bool = True,
 ) -> OsmfinderDownloadResult: ...
 
@@ -1378,10 +1541,12 @@ def download(
     source: OsmExtractSourceLike = "any",
     *,
     download_directory: str | Path = "files",
-    progressbar: bool = True,
     select_first_match: bool = True,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
+    force_single_result: bool = False,
+    single_result_iou_threshold: float = 0.99,
+    progressbar: bool = True,
 ) -> OsmfinderDownloadResult:
     """
     Download an OSM extract by name or geometry.
@@ -1393,9 +1558,8 @@ def download(
         query (Union[str, BaseGeometry]): Text query
             or shapely geometry to search for.
         source (OsmExtractSourceLike): OSM source name. Defaults to 'any'.
-        download_directory (Union[str, Path]): Directory where PBF files should be saved.
-            Defaults to "files".
-        progressbar (bool): Show progress bar. Defaults to True.
+        download_directory (Union[str, Path]): Directory where the file should be
+            downloaded. Defaults to "files".
         select_first_match (bool): When multiple extracts match the query by name, select the
             first one (sorted by area ascending, then id) with a warning instead of raising
             an error. Only used for string queries. Defaults to `True`.
@@ -1404,6 +1568,17 @@ def download(
             Defaults to 0.01.
         allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
             by any OSM extract. Only used for geometry queries. Defaults to `False`.
+        force_single_result (bool): When ``True``, return only the smallest extract that best
+            covers the geometry. If ``allow_uncovered_geometry`` is ``False``, the smallest fully
+            containing extract is returned. If ``allow_uncovered_geometry`` is ``True``, the
+            extract with the highest IoU above ``single_result_iou_threshold`` is returned.
+            If no candidate meets the threshold, the smallest fully containing extract is used as
+            a fallback.
+            Only used for geometry queries. Defaults to ``False``.
+        single_result_iou_threshold (float): Minimal IoU value for selecting a single result when
+            ``force_single_result`` is ``True`` and ``allow_uncovered_geometry`` is ``True``.
+            Only used for geometry queries. Defaults to 0.99.
+        progressbar (bool): Show progress bar. Defaults to True.
 
     Returns:
         OsmfinderDownloadResult: Result containing ``download_paths`` and ``find_result``
@@ -1441,6 +1616,15 @@ def download(
             progressbar=progressbar,
             select_first_match=select_first_match,
         )
+    return find_and_download_extracts_pbf_files(
+        query,
+        source=source,
+        download_directory=download_directory,
+        geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
+        allow_uncovered_geometry=allow_uncovered_geometry,
+        force_single_result=force_single_result,
+        single_result_iou_threshold=single_result_iou_threshold,
+    )
     return find_and_download_extracts_pbf_files(
         query,
         source=source,
