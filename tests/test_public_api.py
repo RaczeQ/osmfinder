@@ -14,6 +14,7 @@ def test_public_api_exposed() -> None:
     """Test if the public API surface is exposed at the package level."""
     for name in (
         "get_extract_by_query",
+        "get_available_extracts",
         "download_extract_by_query",
         "find_smallest_containing_extracts",
         "find_and_download_extracts_pbf_files",
@@ -111,3 +112,28 @@ def test_fuzzy_extract_name_queries(monkeypatch: pytest.MonkeyPatch, fake_index)
         except (OsmExtractZeroMatchesError, OsmExtractMultipleMatchesError):
             continue
         assert result.extract.file_name in {"big", "big_small"}
+
+
+def test_get_available_extracts_returns_list(monkeypatch: pytest.MonkeyPatch, fake_index) -> None:
+    """get_available_extracts returns a list of OpenStreetMapExtract objects."""
+    from osmfinder import finder
+
+    monkeypatch.setattr(finder, "_get_index_for_sources", lambda *args: fake_index)
+
+    extracts = osmfinder.get_available_extracts("any")
+    assert isinstance(extracts, list)
+    assert len(extracts) == 2
+    assert all(isinstance(e, osmfinder.OpenStreetMapExtract) for e in extracts)
+    ids = [e.id for e in extracts]
+    assert set(ids) == {"a", "b"}
+
+
+def test_get_available_extracts_excludes_ids(monkeypatch: pytest.MonkeyPatch, fake_index) -> None:
+    """excluded_extracts_ids filters out the specified extracts."""
+    from osmfinder import finder
+
+    monkeypatch.setattr(finder, "_get_index_for_sources", lambda *args: fake_index)
+
+    extracts = osmfinder.get_available_extracts("any", excluded_extracts_ids={"a"})
+    assert len(extracts) == 1
+    assert extracts[0].id == "b"

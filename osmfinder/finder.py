@@ -64,6 +64,7 @@ __all__ = [
     "find_smallest_containing_extracts",
     "clear_osm_index_cache",
     "get_extract_by_query",
+    "get_available_extracts",
     "download_extract_by_query",
     "display_available_extracts",
     "OsmExtractSource",
@@ -697,6 +698,53 @@ def display_available_extracts(
                 console.print(tree)
     except ValueError as ex:
         raise ValueError(f"Unknown OSM extracts source: {source}.") from ex
+
+
+def get_available_extracts(
+    source: OsmExtractSourceLike = "any",
+    excluded_extracts_ids: set[str] | None = None,
+) -> list[OpenStreetMapExtract]:
+    """
+    Return all available OSM extracts for a source as a list.
+
+    Uses the same index loading and caching as the rest of the API. Extracts are returned
+    sorted by area ascending (then id), matching the order used by the internal index.
+
+    Args:
+        source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
+            'BBBike', 'osmfr', 'GEO2Day', 'Movisda-admin', 'Movisda-grid', or an iterable /
+            comma-separated string of those (e.g. ['BBBike', 'OSMfr'] or 'bbbike,osmfr').
+            Defaults to 'any'.
+        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the
+            result. Useful for skipping extracts that are unavailable. Defaults to `None`.
+
+    Returns:
+        list[OpenStreetMapExtract]: List of all available extracts for the given source(s).
+
+    Examples:
+        >>> import osmfinder
+        >>> # Get all extracts from a single source
+        >>> extracts = osmfinder.get_available_extracts("Geofabrik")
+        >>> isinstance(extracts, list)
+        True
+        >>> len(extracts) >= 1
+        True
+        >>> # Get all extracts across all sources
+        >>> all_extracts = osmfinder.get_available_extracts()
+        >>> isinstance(all_extracts, list)
+        True
+        >>> len(all_extracts) >= 1
+        True
+    """
+    try:
+        index = _get_index_for_sources(source)
+    except ValueError as ex:
+        raise ValueError(f"Unknown OSM extracts source: {source}.") from ex
+
+    if excluded_extracts_ids:
+        index = index.filter_by_mask(~np.isin(index.ids, list(excluded_extracts_ids)))
+
+    return list(index)
 
 
 def find_smallest_containing_extracts(

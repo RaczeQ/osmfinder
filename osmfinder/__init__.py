@@ -25,6 +25,7 @@ from osmfinder.finder import (
     find,
     find_and_download_extracts_pbf_files,
     find_smallest_containing_extracts,
+    get_available_extracts,
     get_extract_by_query,
 )
 
@@ -46,5 +47,6 @@ __all__ = [
     "find",
     "find_and_download_extracts_pbf_files",
     "find_smallest_containing_extracts",
+    "get_available_extracts",
     "get_extract_by_query",
 ]

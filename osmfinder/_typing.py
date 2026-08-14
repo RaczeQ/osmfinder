@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, cast
@@ -179,6 +179,15 @@ class OsmExtractsIndex:
             geometry=self.geometries[idx],
             file_name=str(self.file_names[idx]),
         )
+
+    def __iter__(self) -> Iterator[OpenStreetMapExtract]:
+        """Iterate over all extracts as OpenStreetMapExtract objects."""
+        for i in range(len(self.ids)):
+            yield self.get_extract_by_index(i)
+
+    def __len__(self) -> int:
+        """Return the number of extracts in the index."""
+        return len(self.ids)
 
     def filter_by_mask(self, mask: np.ndarray) -> "OsmExtractsIndex":
         """Returns new instance of the index, filtered by the mask."""

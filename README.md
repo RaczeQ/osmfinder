@@ -57,6 +57,11 @@ print(dl.download_paths[0].name)    # 'geofabrik_europe_monaco.osm.pbf'
 
 # --- explore what's available ---
 osmfinder.display_available_extracts("Geofabrik")
+
+# Get all extracts as a list for programmatic use
+extracts = osmfinder.get_available_extracts("Geofabrik")
+for extract in extracts:
+    print(extract.id, extract.file_name)
 ```
 
 ### Sources
@@ -168,6 +173,7 @@ OsmfinderDownloadResult
 | Function | Search by | Returns |
 |---|---|---|
 | `get_extract_by_query` / `find` | name / id | `OsmfinderQueryResult` |
+| `get_available_extracts` | — | `list[OpenStreetMapExtract]` |
 | `download_extract_by_query` / `download` | name / id | `OsmfinderDownloadResult` |
 | `find_smallest_containing_extracts` | geometry | `OsmfinderGeometryResult` |
 | `find_and_download_extracts_pbf_files` | geometry | `OsmfinderDownloadResult` |
