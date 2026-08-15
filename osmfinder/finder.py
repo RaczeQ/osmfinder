@@ -1320,6 +1320,15 @@ def _cover_geometry_with_extracts(
             and intersects(cast("BaseGeometry", polygons_index.geometries[idx]), geometry_to_cover)
         ]
 
+        # Sort candidates deterministically by area then id so that
+        # np.lexsort tiebreaking is stable across platforms/processes.
+        candidate_sort_areas = np.array(
+            [float(polygons_index.areas[idx]) for idx in candidate_indices]
+        )
+        candidate_sort_ids = np.array([str(polygons_index.ids[idx]) for idx in candidate_indices])
+        candidate_order = np.lexsort((candidate_sort_ids, candidate_sort_areas))
+        candidate_indices = [candidate_indices[i] for i in candidate_order]
+
         if not candidate_indices:
             if not allow_uncovered_geometry:
                 raise GeometryNotCoveredError(
@@ -1440,8 +1449,9 @@ def _filter_extracts(
 
     simplified_extracts_ids = _simplify_selected_extracts(filtered_extracts_ids, sorted_extracts)
 
-    for extract_id in simplified_extracts_ids:
-        filtered_extracts.append(_get_extract_by_id(sorted_extracts, extract_id))
+    for idx in range(len(sorted_extracts.ids)):
+        if sorted_extracts.ids[idx] in simplified_extracts_ids:
+            filtered_extracts.append(sorted_extracts.get_extract_by_index(int(idx)))
 
     return filtered_extracts
 
@@ -1486,13 +1496,13 @@ def _filter_extracts_for_single_geometry(
 def _simplify_selected_extracts(
     filtered_extracts_ids: set[str], sorted_extracts: OsmExtractsIndex
 ) -> set[str]:
-    simplified_extracts_ids: set[str] = filtered_extracts_ids.copy()
+    simplified_extracts_ids = filtered_extracts_ids.copy()
 
     simplify_again = True
     while simplify_again:
         simplify_again = False
         extract_to_remove = None
-        for extract_id in simplified_extracts_ids:
+        for extract_id in sorted(simplified_extracts_ids):
             extract_idx = int(np.flatnonzero(sorted_extracts.ids == extract_id)[0])
             extract_geometry = sorted_extracts.geometries[extract_idx]
 
