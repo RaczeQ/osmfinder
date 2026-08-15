@@ -74,7 +74,9 @@ print(extracts[0].id)           # 'Geofabrik_greater-london'
 
 # --- force single extract ---
 geometry = box(9.4, 47.2, 9.8, 47.6)
-result = osmfinder.find_smallest_containing_extracts(geometry)
+result = osmfinder.find_smallest_containing_extracts(
+    geometry, force_single_result=False  # default behaviour
+)
 print(len(result.extracts))     # 4
 print(result.extracts[0].id)    # 'GEO2Day_europe_austria_vorarlberg'
 print(result.extracts[1].id)    # 'BBBike_Konstanz'
