@@ -3531,7 +3531,7 @@ wheels = [
 
 [[package]]
 name = "osmfinder"
-version = "1.0.0"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyascii" },
@@ -3600,8 +3600,8 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "anyascii", specifier = ">=0.3.3" },
-    { name = "arro3-core" },
-    { name = "arro3-io" },
+    { name = "arro3-core", specifier = ">=0.8.0" },
+    { name = "arro3-io", specifier = ">=0.8.0" },
     { name = "beautifulsoup4" },
     { name = "platformdirs", specifier = ">=2" },
     { name = "pooch", specifier = ">=1.6.0" },
