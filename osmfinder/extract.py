@@ -1,5 +1,6 @@
 """OpenStreetMap extract class."""
 
+import logging
 import warnings
 from collections.abc import Callable
 from datetime import datetime
@@ -21,6 +22,8 @@ from osmfinder.exceptions import (
     OsmExtractIndexCorruptedError,
     OsmExtractIndexOutdatedWarning,
 )
+
+logger = logging.getLogger("osmfinder.extract")
 
 LFS_DIRECTORY_URL = "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/precalculated_indexes"
 
@@ -78,6 +81,7 @@ def load_index_decorator(
 
             # Check if index exists in cache
             if not force_recalculation and global_cache_file_path.exists():
+                logger.debug("READ cache: %s", global_cache_file_path)
                 index = _read_index_from_file()
             # Move locally downloaded cache to global directory
             elif (
@@ -87,11 +91,13 @@ def load_index_decorator(
                 import shutil
 
                 shutil.copy(local_cache_file_path, global_cache_file_path)
+                logger.debug("COPIED local cache -> global: %s", global_cache_file_path)
                 index = _read_index_from_file()
             # Download index
             elif not force_recalculation and _download_precalculated_index_from_github(
                 global_cache_file_path
             ):
+                logger.debug("DOWNLOADED index: %s", global_cache_file_path)
                 index = _read_index_from_file()
             # Calculate index locally
             else:  # pragma: no cover
@@ -111,6 +117,7 @@ def load_index_decorator(
             # Save index to cache
             if force_recalculation or not global_cache_file_path.exists():
                 write_parquet_index(index, global_cache_file_path)
+                logger.debug("WROTE cache: %s", global_cache_file_path)
 
             global_cache_file_older_than_year = (
                 datetime.now() - relativedelta(years=1)
