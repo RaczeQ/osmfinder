@@ -1320,6 +1320,15 @@ def _cover_geometry_with_extracts(
             and intersects(cast("BaseGeometry", polygons_index.geometries[idx]), geometry_to_cover)
         ]
 
+        # Sort candidates deterministically by area then id so that
+        # np.lexsort tiebreaking is stable across platforms/processes.
+        candidate_sort_areas = np.array(
+            [float(polygons_index.areas[idx]) for idx in candidate_indices]
+        )
+        candidate_sort_ids = np.array([str(polygons_index.ids[idx]) for idx in candidate_indices])
+        candidate_order = np.lexsort((candidate_sort_ids, candidate_sort_areas))
+        candidate_indices = [candidate_indices[i] for i in candidate_order]
+
         if not candidate_indices:
             if not allow_uncovered_geometry:
                 raise GeometryNotCoveredError(
