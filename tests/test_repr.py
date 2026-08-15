@@ -238,7 +238,7 @@ def test_download_repr_basic() -> None:
     repr_str = repr(dl_result)
     assert "OsmfinderDownloadResult" in repr_str
     assert "downloaded:" in repr_str
-    assert Path("/tmp/alpha.osm.pbf").as_posix() in repr_str
+    assert str(Path("/tmp/alpha.osm.pbf")) in repr_str
     assert "unavailable:\n    none" in repr_str
     assert "find result:" in repr_str
     assert "OsmfinderQueryResult" in repr_str
