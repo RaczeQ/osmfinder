@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [QuackOSM](https://github.com/kraina-ai/quackosm) into a standalone library.
 - Find and download OpenStreetMap `*.osm.pbf` extracts by name, id or geometry.
 - Supported providers: Geofabrik, BBBike, OpenStreetMap.fr, Movisda (admin & grid), GEO2day.
-- Public API: `get_extract_by_query` / `find`, `download_extract_by_query` / `download`,
-  `find_smallest_containing_extracts` (and per-source variants),
-  `find_and_download_extracts_pbf_files`, `download_extracts_pbf_files`,
-  `display_available_extracts`, `clear_osm_index_cache`.
+- Public API: `find`, `get_extract_by_query`, `get_available_extracts`,
+  `download`, `download_extract_by_query`, `download_extracts_pbf_files`,
+  `find_smallest_containing_extracts`, `find_and_download_extracts_pbf_files`,
+  `find_extracts_covering_point`, `display_available_extracts`, `clear_osm_index_cache`.

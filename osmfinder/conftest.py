@@ -1,13 +1,9 @@
 """Pytest configuration and fixtures for doctests in the osmfinder package."""
 
-import logging
 from pathlib import Path
 from unittest.mock import patch
 
 from osmfinder._typing import OpenStreetMapExtract
-
-logger = logging.getLogger("osmfinder.conftest")
-logger.debug("Loading osmfinder/conftest.py from %s", Path(__file__).parent)
 
 
 def _mock_download_precalculated_index_from_github(destination_path: Path) -> bool:
@@ -18,9 +14,7 @@ def _mock_download_precalculated_index_from_github(destination_path: Path) -> bo
         import shutil
 
         shutil.copy2(src, destination_path)
-        logger.debug("MOCK: copied test index %s -> %s", src.name, destination_path)
         return True
-    logger.debug("MOCK: no test index for %s", destination_path.name)
     return False
 
 
@@ -34,7 +28,6 @@ def _mock_download_single_extract(
     download_directory.mkdir(parents=True, exist_ok=True)
     file_path = download_directory / f"{extract.file_name}.osm.pbf"
     file_path.touch()
-    logger.debug("MOCK: created empty PBF %s", file_path)
     return file_path
 
 
