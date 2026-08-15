@@ -16,8 +16,8 @@ dependencies = [
     "platformdirs>=2",
     "anyascii>=0.3.3",
     "python-dateutil>=2.8",
-    "arro3-core",
-    "arro3-io",
+    "arro3-core>=0.8.0",
+    "arro3-io>=0.8.0",
 ]
 license = { text = "MIT" }
 keywords = ["openstreetmap", "osm", "pbf", "extract", "geofabrik", "bbbike", "gis", "download"]
