@@ -1440,8 +1440,9 @@ def _filter_extracts(
 
     simplified_extracts_ids = _simplify_selected_extracts(filtered_extracts_ids, sorted_extracts)
 
-    for extract_id in simplified_extracts_ids:
-        filtered_extracts.append(_get_extract_by_id(sorted_extracts, extract_id))
+    for idx in range(len(sorted_extracts.ids)):
+        if sorted_extracts.ids[idx] in simplified_extracts_ids:
+            filtered_extracts.append(sorted_extracts.get_extract_by_index(int(idx)))
 
     return filtered_extracts
 
@@ -1486,13 +1487,13 @@ def _filter_extracts_for_single_geometry(
 def _simplify_selected_extracts(
     filtered_extracts_ids: set[str], sorted_extracts: OsmExtractsIndex
 ) -> set[str]:
-    simplified_extracts_ids: set[str] = filtered_extracts_ids.copy()
+    simplified_extracts_ids = filtered_extracts_ids.copy()
 
     simplify_again = True
     while simplify_again:
         simplify_again = False
         extract_to_remove = None
-        for extract_id in simplified_extracts_ids:
+        for extract_id in sorted(simplified_extracts_ids):
             extract_idx = int(np.flatnonzero(sorted_extracts.ids == extract_id)[0])
             extract_geometry = sorted_extracts.geometries[extract_idx]
 
