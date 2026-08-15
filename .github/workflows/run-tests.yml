@@ -1,8 +1,5 @@
 name: "Run tests workflow"
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
