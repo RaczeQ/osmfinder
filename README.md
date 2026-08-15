@@ -1,6 +1,4 @@
-<p align="center">
-  <img width="300" src="https://raw.githubusercontent.com/raczeq/osmfinder/main/docs/assets/logos/osmfinder_logo.png"><br/>
-</p>
+
 
 # OSM Finder
 
@@ -13,6 +11,22 @@ Find and download publicly available OpenStreetMap `*.osm.pbf` extracts by **nam
 and [GEO2day](https://geo2day.com/). It can look up an extract by a text query, or find the
 smallest set of extracts covering an arbitrary geometry, and download the matching `*.osm.pbf`
 files.
+
+<p align="center">
+  <img width="300" src="https://raw.githubusercontent.com/raczeq/osmfinder/main/docs/assets/logos/osmfinder_logo.png"><br/>
+</p>
+
+<p align="center">
+    <img alt="GitHub" src="https://img.shields.io/github/license/raczeq/osmfinder?logo=mit&logoColor=%23fff">
+    <img src="https://img.shields.io/github/checks-status/raczeq/osmfinder/main?logo=GitHubActions&logoColor=%23fff" alt="Checks">
+    <a href="https://github.com/raczeq/osmfinder/actions/workflows/ci-prod.yml" target="_blank"><img alt="GitHub Workflow Status - PROD" src="https://img.shields.io/github/actions/workflow/status/raczeq/osmfinder/ci-prod.yml?label=build-prod&logo=GitHubActions&logoColor=%23fff"></a>
+    <a href="https://results.pre-commit.ci/latest/github/raczeq/osmfinder/main" target="_blank"><img src="https://results.pre-commit.ci/badge/github/raczeq/osmfinder/main.svg" alt="pre-commit.ci status"></a>
+    <a href="https://www.codefactor.io/repository/github/raczeq/osmfinder"><img alt="CodeFactor Grade" src="https://img.shields.io/codefactor/grade/github/raczeq/osmfinder?logo=codefactor&logoColor=%23fff"></a>
+    <a href="https://app.codecov.io/gh/raczeq/osmfinder/tree/main"><img alt="Codecov" src="https://img.shields.io/codecov/c/github/raczeq/osmfinder?logo=codecov&token=PRS4E02ZX0&logoColor=%23fff"></a>
+    <a href="https://pypi.org/project/osmfinder" target="_blank"><img src="https://img.shields.io/pypi/v/osmfinder?color=%2334D058&label=pypi%20package&logo=pypi&logoColor=%23fff" alt="Package version"></a>
+    <a href="https://pypi.org/project/osmfinder" target="_blank"><img src="https://img.shields.io/pypi/pyversions/osmfinder.svg?color=%2334D058&logo=python&logoColor=%23fff" alt="Supported Python versions"></a>
+    <a href="https://pypi.org/project/osmfinder" target="_blank"><img alt="PyPI - Downloads" src="https://img.shields.io/pypi/dm/osmfinder"></a>
+</p>
 
 > **Logo attribution:** The osmfinder logo uses icons from the [Lucide](https://lucide.dev/) icon set —
 > specifically the **earth** and **square-dashed** icons.
