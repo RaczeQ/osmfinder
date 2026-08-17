@@ -24,6 +24,7 @@ files.
     <a href="https://www.codefactor.io/repository/github/raczeq/osmfinder"><img alt="CodeFactor Grade" src="https://img.shields.io/codefactor/grade/github/raczeq/osmfinder?logo=codefactor&logoColor=%23fff"></a>
     <a href="https://app.codecov.io/gh/raczeq/osmfinder/tree/main"><img alt="Codecov" src="https://img.shields.io/codecov/c/github/raczeq/osmfinder?logo=codecov&token=PRS4E02ZX0&logoColor=%23fff"></a>
     <a href="https://pypi.org/project/osmfinder" target="_blank"><img src="https://img.shields.io/pypi/v/osmfinder?color=%2334D058&label=pypi%20package&logo=pypi&logoColor=%23fff" alt="Package version"></a>
+    <a href="https://anaconda.org/conda-forge/osmfinder" target="_blank"><img src="https://img.shields.io/conda/vn/conda-forge/osmfinder?&logo=anaconda&logoColor=%23fff" alt="Package version"></a>
     <a href="https://pypi.org/project/osmfinder" target="_blank"><img src="https://img.shields.io/pypi/pyversions/osmfinder.svg?color=%2334D058&logo=python&logoColor=%23fff" alt="Supported Python versions"></a>
     <a href="https://pypi.org/project/osmfinder" target="_blank"><img alt="PyPI - Downloads" src="https://img.shields.io/pypi/dm/osmfinder"></a>
 </p>
