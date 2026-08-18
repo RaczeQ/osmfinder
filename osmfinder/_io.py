@@ -66,7 +66,12 @@ def write_parquet_index(index: OsmExtractsIndex, file_path: Path) -> None:
     )
 
     geo_metadata = _build_geo_metadata(index)
-    write_parquet(table, file_path, key_value_metadata={"geo": json.dumps(geo_metadata)})
+    write_parquet(
+        table,
+        file_path,
+        key_value_metadata={"geo": json.dumps(geo_metadata)},
+        compression="zstd(22)",
+    )
 
 
 def _build_geo_metadata(index: OsmExtractsIndex) -> dict[str, object]:
