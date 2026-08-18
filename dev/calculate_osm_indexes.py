@@ -11,7 +11,17 @@ from osmfinder.finder import OSM_EXTRACT_SOURCE_INDEX_FUNCTION
 if __name__ == "__main__":
     clear_osm_index_cache()
     for get_index_function in OSM_EXTRACT_SOURCE_INDEX_FUNCTION.values():
-        get_index_function(force_recalculation=True)
+        tries = 10
+        while tries > 0:
+            try:
+                get_index_function(force_recalculation=True)
+                break
+            except Exception as ex:
+                tries -= 1
+                if tries == 0:
+                    raise ex
+                else:
+                    print(ex)
 
     extract_sources = [_source for _source in OsmExtractSource if _source != OsmExtractSource.any]
 
