@@ -98,7 +98,7 @@ def load_index_decorator(
                 if not fast_build:
                     quick_refresh_names = ", ".join(sorted(s.value for s in _QUICK_REFRESH_SOURCES))
                     warnings.warn(
-                        f"Library has to build an index for the {extract_source} provider."
+                        f"Library has to build an index for the {extract_source.value} provider."
                         " This can take multiple minutes. To avoid waiting, use one of the"
                         f" quick-refresh sources that load from a single file:"
                         f" {quick_refresh_names}.",
