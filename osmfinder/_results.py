@@ -51,6 +51,30 @@ class OsmfinderResult:
             f"  sources used: {sources}"
         )
 
+    def download(
+        self,
+        download_directory: str | Path = "files",
+        progressbar: bool = True,
+    ) -> list[Path]:
+        """
+        Download all extracts in this result as PBF files.
+
+        Args:
+            download_directory (Union[str, Path]): Directory where PBF files should be saved.
+                Defaults to "files".
+            progressbar (bool, optional): Show progress bar. Defaults to True.
+
+        Returns:
+            list[Path]: List of downloaded file paths.
+        """
+        from osmfinder.finder import download_extracts
+
+        return download_extracts(
+            self.extracts,
+            download_directory=download_directory,
+            progressbar=progressbar,
+        )
+
 
 @dataclass
 class OsmfinderQueryResult(OsmfinderResult):

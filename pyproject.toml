@@ -18,6 +18,7 @@ dependencies = [
     "python-dateutil>=2.8",
     "arro3-core>=0.8.0",
     "arro3-io>=0.8.0",
+    "typer>=0.12.0",
 ]
 license = { text = "MIT" }
 keywords = ["openstreetmap", "osm", "pbf", "extract", "geofabrik", "bbbike", "gis", "download"]
@@ -41,6 +42,9 @@ classifiers = [
 Homepage = "https://github.com/RaczeQ/osmfinder"
 Repository = "https://github.com/RaczeQ/osmfinder"
 Changelog = "https://github.com/RaczeQ/osmfinder/blob/main/CHANGELOG.md"
+
+[project.scripts]
+osmfinder = "osmfinder.cli:app"
 
 [dependency-groups]
 dev = [

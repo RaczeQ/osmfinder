@@ -32,6 +32,7 @@ from osmfinder._results import (
     OsmfinderDownloadResult,
     OsmfinderGeometryResult,
     OsmfinderQueryResult,
+    OsmfinderResult,
 )
 from osmfinder._typing import (
     OpenStreetMapExtract,
@@ -59,6 +60,7 @@ from osmfinder.sources.osm_fr import _get_openstreetmap_fr_index
 from osmfinder.sources.tree import get_available_extracts_as_rich_tree
 
 __all__ = [
+    "download_extracts",
     "download_extracts_pbf_files",
     "find_and_download_extracts_pbf_files",
     "find_extracts_covering_point",
@@ -99,6 +101,57 @@ def download_extracts_pbf_files(
     downloaded, _ = _download_extracts_pbf_files(
         extracts, download_directory, progressbar=progressbar, ignore_unavailable=False
     )
+    return [path for _, path in downloaded]
+
+
+def download_extracts(
+    extracts: list[OpenStreetMapExtract] | OpenStreetMapExtract | OsmfinderResult,
+    download_directory: str | Path = "files",
+    progressbar: bool = True,
+) -> list[Path]:
+    """
+    Download OSM extracts as PBF files.
+
+    Accepts a single extract, a list of extracts, or an :class:`OsmfinderResult` object.
+    Unavailable extracts are skipped with a warning instead of raising.
+
+    Args:
+        extracts (Union[list[OpenStreetMapExtract], OpenStreetMapExtract, OsmfinderResult]):
+            Extracts to download.
+        download_directory (Union[str, Path]): Directory where PBF files should be saved.
+            Defaults to "files".
+        progressbar (bool, optional): Show progress bar. Defaults to True.
+
+    Returns:
+        list[Path]: List of downloaded file paths.
+    """
+    download_directory = Path(download_directory)
+
+    if isinstance(extracts, OsmfinderResult):
+        extracts_to_download = extracts.extracts
+    elif isinstance(extracts, OpenStreetMapExtract):
+        extracts_to_download = [extracts]
+    else:
+        extracts_to_download = extracts
+
+    if not extracts_to_download:
+        return []
+
+    downloaded, unavailable = _download_extracts_pbf_files(
+        extracts_to_download,
+        download_directory,
+        progressbar=progressbar,
+        ignore_unavailable=True,
+    )
+
+    if unavailable:
+        unavailable_names = ", ".join(e.file_name for e in unavailable)
+        warnings.warn(
+            f"Some extracts are unavailable for download ({unavailable_names}).",
+            OsmExtractUnavailableWarning,
+            stacklevel=0,
+        )
+
     return [path for _, path in downloaded]
 
 
