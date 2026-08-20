@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource
 
 if TYPE_CHECKING:
+    from matplotlib.axes import Axes
     from shapely.geometry.base import BaseGeometry
 
 
@@ -122,13 +123,19 @@ class OsmfinderGeometryResult(OsmfinderResult):
     steps: list["GeometryCoveringStep"]
     iou_threshold: float
 
-    def __repr__(self) -> str:
+    @property
+    def coverage(self) -> float:
         input_area = self.input_geometry.area
         covered_area = self.covered_geometry.intersection(self.input_geometry).area
         if input_area > 0:
-            coverage_pct = min(100.0, (covered_area / input_area) * 100)
+            coverage_pct = min(1.0, covered_area / input_area)
         else:
-            coverage_pct = 100.0 if covered_area == 0 else 0.0
+            coverage_pct = 1.0 if covered_area == 0 else 0.0
+
+        return float(coverage_pct)
+
+    def __repr__(self) -> str:
+        coverage_pct = self.coverage * 100
 
         extracts_lines = (
             "\n".join(f"    {e.id} — {e.name}" for e in self.extracts)
@@ -155,6 +162,68 @@ class OsmfinderGeometryResult(OsmfinderResult):
             f"  steps:\n{steps_lines}\n"
             f"  sources used: {_format_sources(self.sources_used)}"
         )
+
+    def plot(self, ax: "Axes | None" = None, legend: bool = True) -> "Axes":
+        """
+        Plot extracts with input geometry.
+
+        Uses Matplotlib and Geopandas to plot the geometries.
+
+        Args:
+            ax (Axes, optional): Matplotlib axes to use for plotting. Defaults to None.
+            legend (bool, optional): Show legend. Defaults to True.
+
+        Returns:
+            Axes: Matplotlib axes with plotted geometries.
+        """
+        try:
+            import geopandas as gpd
+            import matplotlib.patches as mpatches
+            import matplotlib.pyplot as plt
+        except ImportError as ex:
+            raise ImportError(
+                "The geopandas and matplotlib packages are required for plotting the results. "
+                "You can install it using 'conda install -c conda-forge matplotlib geopandas' or "
+                "'pip install matplotlib geopandas'."
+            ) from ex
+
+        if ax is None:
+            _, ax = plt.subplots()
+
+        ex_gs = gpd.GeoSeries([extract.geometry for extract in self.extracts], crs=4326)
+        # outlines only + transparency, so overlapping extracts show up as several borders
+        ex_gs.plot(ax=ax, color="tab:blue", alpha=0.1)
+        ex_gs.boundary.plot(ax=ax, color="tab:blue", linewidth=1.2, alpha=0.6)
+
+        q_gs = gpd.GeoSeries([self.input_geometry], crs=4326)
+
+        q_gs.plot(
+            ax=ax,
+            color=(0, 0, 0, 0),
+            zorder=2,
+            hatch="///",
+            edgecolor="orange",
+            linewidth=1.5,
+        )
+        total_extracts = len(self.extracts)
+        extract_label = "extract" if total_extracts == 1 else "extracts"
+        coverage_pct = self.coverage * 100
+        ax.set_title(f"{total_extracts} {extract_label} ({coverage_pct:.1f}% coverage)")
+
+        if legend:
+            blue_patch = mpatches.Patch(
+                edgecolor=("tab:blue", 0.6), facecolor=("tab:blue", 0.1), label="OSM extract"
+            )
+            orange_patch = mpatches.Patch(
+                facecolor=(0, 0, 0, 0),
+                edgecolor="orange",
+                hatch="///",
+                linewidth=1.5,
+                label="Geometry query",
+            )
+            ax.legend(handles=[orange_patch, blue_patch], loc="best")
+
+        return ax
 
 
 @dataclass

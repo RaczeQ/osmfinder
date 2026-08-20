@@ -1,6 +1,6 @@
 [project]
 name = "osmfinder"
-version = "0.1.0"
+version = "1.0.1"
 description = "Find and download OpenStreetMap *.osm.pbf extracts by name, id or geometry."
 readme = "README.md"
 authors = [{ name = "Kamil Raczycki", email = "kraczycki@kraina.ai" }]
@@ -56,6 +56,8 @@ dev = [
     "matplotlib",
     "folium",
     "mapclassify",
+    "contextily",
+    "pyfonts",
 ]
 lint = [
     "pre-commit>=4.3.0",
@@ -149,7 +151,7 @@ close-quotes-on-newline = true
 wrap-one-line = true
 
 [tool.bumpver]
-current_version = "0.1.0"
+current_version = "1.0.1"
 version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
 commit_message = "chore(CI/CD): bump version {old_version} -> {new_version}"
 commit = true
