@@ -458,6 +458,8 @@ def covers_cmd(
     if bbox is not None:
         try:
             bbox_values = [float(x.strip()) for x in bbox.split(",")]
+            if len(bbox_values) != 4:
+                raise ValueError
             geometry = shapely_box(*bbox_values)
         except ValueError:
             err_console.print(

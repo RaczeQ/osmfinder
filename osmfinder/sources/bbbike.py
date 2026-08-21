@@ -88,6 +88,10 @@ def _iterate_bbbike_index() -> list[OpenStreetMapExtract]:  # pragma: no cover
                 # Fallback to csv regions file
                 matching_row = [row for row in rows if row.startswith(extract_name + ":")][0]
                 coords = list(map(float, matching_row.split(":")[6].split()))
+                if len(coords) != 4:
+                    raise ValueError(
+                        f"Expecting 4 float values to parse bounding box. Got {len(coords)} values."
+                    )
                 polygon = box(*coords)
             pbf_url = f"{BBBIKE_EXTRACTS_INDEX_URL}/{extract_name}/{extract_name}.osm.pbf"
             extracts.append(
