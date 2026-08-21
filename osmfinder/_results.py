@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING
 
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource  # noqa: TC001
-
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from matplotlib.axes import Axes
     from shapely.geometry.base import BaseGeometry
+
+    from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource
 
 
 def _format_extract_list(extracts: list[OpenStreetMapExtract], max_items: int = 5) -> str:
