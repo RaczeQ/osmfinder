@@ -20,18 +20,6 @@ BBBIKE_EXTRACTS_INDEX_URL = "https://download.bbbike.org/osm/bbbike"
 BBBIKE_EXTRACTS_CSV_LIST_URL = (
     "https://raw.githubusercontent.com/wosch/bbbike-world/world/etc/cities.csv"
 )
-BBBIKE_INDEX: OsmExtractsIndex | None = None
-
-__all__ = ["_get_bbbike_index"]
-
-
-def _get_bbbike_index(**kwargs: Any) -> OsmExtractsIndex:
-    global BBBIKE_INDEX  # noqa: PLW0603
-
-    if BBBIKE_INDEX is None:
-        BBBIKE_INDEX = _load_bbbike_index(**kwargs)
-
-    return BBBIKE_INDEX
 
 
 @load_index_decorator(OsmExtractSource.bbbike)
