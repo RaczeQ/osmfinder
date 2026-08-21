@@ -221,7 +221,7 @@ def _resolve_extract_sources(source: OsmExtractSourceLike) -> list[OsmExtractSou
         if item not in seen:
             seen.add(item)
             deduplicated.append(item)
-    return deduplicated
+    return sorted(deduplicated, key=lambda s: s.value.lower())
 
 
 def _get_index_for_sources(source: OsmExtractSourceLike) -> OsmExtractsIndex:
