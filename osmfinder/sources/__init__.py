@@ -16,3 +16,4 @@ for _source_file in _sources_package.glob("*.py"):
             _module = importlib.util.module_from_spec(_spec)
             sys.modules[_module_name] = _module
             _spec.loader.exec_module(_module)
+            setattr(sys.modules[__name__], _source_file.stem, _module)
