@@ -57,7 +57,7 @@ def test_smoke_end_to_end_query_flow(monkeypatch: pytest.MonkeyPatch, fake_index
     """A quick end-to-end sanity check of the public query API."""
     from osmfinder import finder
 
-    monkeypatch.setattr(finder, "_get_index_for_sources", lambda *args: fake_index)
+    monkeypatch.setattr(finder._sources, "_get_index_for_sources", lambda *args: fake_index)
 
     # Name query.
     result = osmfinder.get_extract_by_query("Small")
@@ -93,7 +93,7 @@ def test_fuzzy_geometry_queries(monkeypatch: pytest.MonkeyPatch, fake_index) -> 
     from osmfinder import finder
 
     rng = random.Random(7)
-    monkeypatch.setattr(finder, "_get_index_for_sources", lambda *args: fake_index)
+    monkeypatch.setattr(finder._sources, "_get_index_for_sources", lambda *args: fake_index)
 
     for _ in range(50):
         x = rng.uniform(0, 8)
@@ -111,7 +111,7 @@ def test_fuzzy_extract_name_queries(monkeypatch: pytest.MonkeyPatch, fake_index)
     from osmfinder import finder
 
     rng = random.Random(11)
-    monkeypatch.setattr(finder, "_get_index_for_sources", lambda *args: fake_index)
+    monkeypatch.setattr(finder._sources, "_get_index_for_sources", lambda *args: fake_index)
 
     for _ in range(50):
         query = "".join(rng.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(rng.randint(1, 8)))
@@ -126,7 +126,7 @@ def test_get_available_extracts_returns_list(monkeypatch: pytest.MonkeyPatch, fa
     """get_available_extracts returns a list of OpenStreetMapExtract objects."""
     from osmfinder import finder
 
-    monkeypatch.setattr(finder, "_get_index_for_sources", lambda *args: fake_index)
+    monkeypatch.setattr(finder._sources, "_get_index_for_sources", lambda *args: fake_index)
 
     extracts = osmfinder.get_available_extracts("any")
     assert isinstance(extracts, list)
@@ -140,7 +140,7 @@ def test_get_available_extracts_excludes_ids(monkeypatch: pytest.MonkeyPatch, fa
     """excluded_extracts_ids filters out the specified extracts."""
     from osmfinder import finder
 
-    monkeypatch.setattr(finder, "_get_index_for_sources", lambda *args: fake_index)
+    monkeypatch.setattr(finder._sources, "_get_index_for_sources", lambda *args: fake_index)
 
     extracts = osmfinder.get_available_extracts("any", excluded_extracts_ids={"a"})
     assert len(extracts) == 1

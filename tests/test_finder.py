@@ -105,7 +105,7 @@ def _single_extract_index(source_name: str) -> "Any":
 def test_get_index_for_multiple_sources(mocker: MockerFixture) -> None:
     """Test if indexes for multiple sources are concatenated."""
     mocker.patch.dict(
-        "osmfinder.finder.OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
+        "osmfinder.finder._sources.OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
         {
             OsmExtractSource.bbbike: lambda: _single_extract_index("bbbike"),
             OsmExtractSource.geofabrik: lambda: _single_extract_index("geofabrik"),
@@ -129,7 +129,7 @@ def test_get_index_for_sources_skips_unavailable(mocker: MockerFixture) -> None:
         raise RequestsConnectionError("offline")
 
     mocker.patch.dict(
-        "osmfinder.finder.OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
+        "osmfinder.finder._sources.OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
         {
             OsmExtractSource.geofabrik: lambda: _single_extract_index("geofabrik"),
             OsmExtractSource.bbbike: lambda: _single_extract_index("bbbike"),
@@ -154,7 +154,7 @@ def test_get_index_for_sources_raises_when_all_unavailable(mocker: MockerFixture
         raise RequestsConnectionError("offline")
 
     mocker.patch.dict(
-        "osmfinder.finder.OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
+        "osmfinder.finder._sources.OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
         {OsmExtractSource.geofabrik: unavailable, OsmExtractSource.bbbike: unavailable},
         clear=True,
     )
@@ -174,7 +174,7 @@ def test_get_index_for_single_source_propagates_error(mocker: MockerFixture) -> 
         raise RequestsConnectionError("offline")
 
     mocker.patch.dict(
-        "osmfinder.finder.OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
+        "osmfinder.finder._sources.OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
         {OsmExtractSource.geofabrik: unavailable},
         clear=True,
     )
@@ -259,7 +259,7 @@ def test_select_first_match(mocker: MockerFixture) -> None:
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
 
     # Default (True): selects the smallest-area match (osmfr, box 0,0,1,1) and warns.
     with pytest.warns(OsmExtractMultipleMatchesWarning):
@@ -602,7 +602,7 @@ def test_force_single_result_complete_coverage(mocker: MockerFixture) -> None:
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     result = find_smallest_containing_extracts(geometry, force_single_result=True)
     assert len(result.extracts) == 1
     assert result.extracts[0].id == "extract_b"
@@ -627,7 +627,7 @@ def test_force_single_result_default_threshold(mocker: MockerFixture) -> None:
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     result = find_smallest_containing_extracts(geometry, force_single_result=True)
     assert len(result.extracts) == 1
     assert result.extracts[0].id == "extract_b"
@@ -658,7 +658,7 @@ def test_force_single_result_selects_highest_iou(mocker: MockerFixture) -> None:
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     result = find_smallest_containing_extracts(geometry, force_single_result=True)
     assert len(result.extracts) == 1
     assert result.extracts[0].id == "extract_tight"
@@ -690,7 +690,7 @@ def test_force_single_result_with_095_threshold(mocker: MockerFixture) -> None:
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     result_099 = find_smallest_containing_extracts(
         geometry, force_single_result=True, single_result_iou_threshold=0.99
     )
@@ -720,7 +720,7 @@ def test_force_single_result_threshold_rejects_low_iou(mocker: MockerFixture) ->
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     result_strict = find_smallest_containing_extracts(
         geometry, force_single_result=True, single_result_iou_threshold=0.99
     )
@@ -746,7 +746,7 @@ def test_force_single_result_no_extract_above_threshold(mocker: MockerFixture) -
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     with pytest.raises(GeometryNotCoveredError):
         find_smallest_containing_extracts(geometry, force_single_result=True)
 
@@ -764,7 +764,7 @@ def test_force_single_result_invalid_threshold_raises(mocker: MockerFixture) -> 
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     with pytest.raises(ValueError):
         find_smallest_containing_extracts(
             geometry, force_single_result=True, single_result_iou_threshold=-0.1
@@ -802,7 +802,7 @@ def test_force_single_result_prefers_non_complete_above_threshold(mocker: Mocker
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     result = find_smallest_containing_extracts(
         geometry,
         force_single_result=True,
@@ -833,7 +833,7 @@ def test_force_single_result_smallest_complete_cover(mocker: MockerFixture) -> N
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     result = find_smallest_containing_extracts(
         geometry, force_single_result=True, single_result_iou_threshold=0.99
     )
@@ -855,7 +855,7 @@ def test_force_single_result_warns_on_much_larger_extract(mocker: MockerFixture)
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     with pytest.warns(GeometryNotCoveredWarning, match="is .*x larger than the query geometry"):
         find_smallest_containing_extracts(geometry, force_single_result=True)
 
@@ -873,7 +873,7 @@ def test_force_single_result_allow_uncovered_geometry_no_candidates(mocker: Mock
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     with pytest.raises(GeometryNotCoveredError, match="No OSM extracts intersect"):
         find_smallest_containing_extracts(
             geometry, force_single_result=True, allow_uncovered_geometry=True
@@ -897,7 +897,7 @@ def test_force_single_result_falls_back_to_complete_cover(mocker: MockerFixture)
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     result = find_smallest_containing_extracts(
         geometry,
         force_single_result=True,
@@ -927,7 +927,7 @@ def test_find_extracts_covering_point_returns_matching_extracts(mocker: MockerFi
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
 
     point_inside_both = (1.0, 1.0)
     result = find_extracts_covering_point(point_inside_both)
@@ -966,7 +966,7 @@ def test_find_extracts_covering_point_returns_smallest_first(mocker: MockerFixtu
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
 
     result = find_extracts_covering_point((0.5, 0.5))
     assert [e.id for e in result] == ["tiny", "medium", "huge"]
@@ -988,7 +988,7 @@ def test_find_extracts_covering_point_returns_empty_list_on_no_match(
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
 
     result = find_extracts_covering_point((0.0, 0.0))
     assert result == []
@@ -1016,7 +1016,7 @@ def test_find_extracts_covering_point_with_shapely_point(mocker: MockerFixture) 
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
 
     from shapely.geometry import Point
 
@@ -1045,7 +1045,7 @@ def test_find_extracts_covering_point_excluded_ids(mocker: MockerFixture) -> Non
             },
         ]
     )
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
 
     result = find_extracts_covering_point((1.0, 1.0), excluded_extracts_ids={"skip"})
     assert len(result) == 1

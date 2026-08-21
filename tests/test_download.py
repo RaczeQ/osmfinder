@@ -43,7 +43,7 @@ def test_find_and_download_excludes_unavailable_extracts(mocker: MockerFixture) 
             raise HTTPError("Extract unavailable")
         return Path(download_directory) / f"{extract.file_name}.osm.pbf"
 
-    mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
+    mocker.patch("osmfinder.finder._download._download_single_extract", side_effect=fake_download)
 
     with tempfile.TemporaryDirectory() as tmp_dir, pytest.warns(OsmExtractUnavailableWarning):
         result = find_and_download_extracts_pbf_files(geometry, "geofabrik", tmp_dir)
@@ -67,7 +67,7 @@ def test_download_extracts_pbf_files_raises_on_unavailable(mocker: MockerFixture
         file_name="test_extract",
     )
     mocker.patch(
-        "osmfinder.finder._download_single_extract",
+        "osmfinder.finder._download._download_single_extract",
         side_effect=HTTPError("Extract unavailable"),
     )
 
@@ -106,7 +106,7 @@ def test_download_extract_by_query_redundancy(mocker: MockerFixture) -> None:
     from requests.exceptions import ConnectionError as RequestsConnectionError
 
     index = _two_vatican_city_index()
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
 
     def fake_download(
         extract: OpenStreetMapExtract, download_directory: Path, progressbar: bool = True
@@ -116,7 +116,7 @@ def test_download_extract_by_query_redundancy(mocker: MockerFixture) -> None:
             raise RequestsConnectionError("offline")
         return Path(download_directory) / f"{extract.file_name}.osm.pbf"
 
-    mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
+    mocker.patch("osmfinder.finder._download._download_single_extract", side_effect=fake_download)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         with pytest.warns(OsmExtractMultipleMatchesWarning):
@@ -135,9 +135,9 @@ def test_download_extract_by_query_all_unavailable(mocker: MockerFixture) -> Non
     from requests.exceptions import ConnectionError as RequestsConnectionError
 
     index = _two_vatican_city_index()
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
     mocker.patch(
-        "osmfinder.finder._download_single_extract",
+        "osmfinder.finder._download._download_single_extract",
         side_effect=RequestsConnectionError("offline"),
     )
 
@@ -157,7 +157,7 @@ def test_download_extract_by_query_all_unavailable(mocker: MockerFixture) -> Non
 def test_download_extract_by_query_zero_match(mocker: MockerFixture) -> None:
     """Test if a genuinely unmatched query still raises a zero-match error (not availability)."""
     index = _two_vatican_city_index()
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         with pytest.raises(OsmExtractZeroMatchesError):
@@ -180,7 +180,7 @@ def test_find_and_download_unavailable_extracts_list(mocker: MockerFixture) -> N
             raise HTTPError("Extract unavailable")
         return Path(download_directory) / f"{extract.file_name}.osm.pbf"
 
-    mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
+    mocker.patch("osmfinder.finder._download._download_single_extract", side_effect=fake_download)
 
     with tempfile.TemporaryDirectory() as tmp_dir, pytest.warns(OsmExtractUnavailableWarning):
         result = find_and_download_extracts_pbf_files(geometry, "geofabrik", tmp_dir)
@@ -194,7 +194,7 @@ def test_download_extract_by_query_unavailable_list(mocker: MockerFixture) -> No
     from requests.exceptions import ConnectionError as RequestsConnectionError
 
     index = _two_vatican_city_index()
-    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    mocker.patch("osmfinder.finder._sources._get_index_for_sources", return_value=index)
 
     def fake_download(
         extract: OpenStreetMapExtract, download_directory: Path, progressbar: bool = True
@@ -203,7 +203,7 @@ def test_download_extract_by_query_unavailable_list(mocker: MockerFixture) -> No
             raise RequestsConnectionError("offline")
         return Path(download_directory) / f"{extract.file_name}.osm.pbf"
 
-    mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
+    mocker.patch("osmfinder.finder._download._download_single_extract", side_effect=fake_download)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         with pytest.warns(OsmExtractMultipleMatchesWarning):

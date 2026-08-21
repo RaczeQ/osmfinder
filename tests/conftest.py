@@ -39,7 +39,7 @@ patch(
 ).start()
 
 patch(
-    "osmfinder.finder._download_single_extract",
+    "osmfinder.finder._download._download_single_extract",
     side_effect=_mock_download_single_extract,
 ).start()
 

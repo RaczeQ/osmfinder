@@ -132,6 +132,14 @@ warn_return_any = true
 module = "tests.*"
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+module = [
+    "shapely.*",
+    "tqdm.*",
+    "pooch.*",
+]
+ignore_missing_imports = true
+
 [tool.docformatter]
 syntax = 'google'
 black = true
