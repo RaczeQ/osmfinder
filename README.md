@@ -75,7 +75,7 @@ print(extracts[0].id)           # 'Geofabrik_greater-london'
 
 # --- force single extract ---
 geometry = box(9.4, 47.2, 9.8, 47.6)
-result = osmfinder.find_smallest_containing_extracts(
+result = osmfinder.find_extracts_by_geometry(
     geometry, force_single_result=False  # default behaviour
 )
 print(len(result.extracts))     # 4
@@ -84,7 +84,7 @@ print(result.extracts[1].id)    # 'BBBike_Konstanz'
 print(result.extracts[2].id)    # 'GEO2Day_europe_switzerland_saint_gallen'
 print(result.extracts[3].id)    # 'Movisda-admin_LI'
 
-result = osmfinder.find_smallest_containing_extracts(
+result = osmfinder.find_extracts_by_geometry(
     geometry, force_single_result=True
 )
 print(len(result.extracts))     # 1
@@ -105,8 +105,8 @@ The `source` argument accepts a single value, an iterable, or a comma-separated 
 values: `any`, `Geofabrik`, `BBBike`, `osmfr`, `GEO2Day`, `Movisda-admin`, `Movisda-grid`.
 
 ```python
-osmfinder.get_extract_by_query("Berlin", ["Geofabrik", "BBBike"])
-osmfinder.get_extract_by_query("Berlin", "geofabrik,bbbike")
+osmfinder.find_extract_by_query("Berlin", ["Geofabrik", "BBBike"])
+osmfinder.find_extract_by_query("Berlin", "geofabrik,bbbike")
 ```
 
 ## Result classes
@@ -115,7 +115,7 @@ All find and download operations return typed result objects instead of raw list
 
 ### `OsmfinderQueryResult`
 
-Returned by `get_extract_by_query()` and `find()` when called with a string query.
+Returned by `find_extract_by_query()` and `find()` when called with a string query.
 
 | Attribute | Type | Description |
 |---|---|---|
@@ -127,7 +127,7 @@ Returned by `get_extract_by_query()` and `find()` when called with a string quer
 
 ### `OsmfinderGeometryResult`
 
-Returned by `find_smallest_containing_extracts()` and `find()` when called with a geometry.
+Returned by `find_extracts_by_geometry()` and `find()` when called with a geometry.
 
 | Attribute | Type | Description |
 |---|---|---|
@@ -141,7 +141,7 @@ Returned by `find_smallest_containing_extracts()` and `find()` when called with 
 
 ### `OsmfinderDownloadResult`
 
-Returned by `download_extract_by_query()`, `find_and_download_extracts_pbf_files()`, and `download()`.
+Returned by `download()`.
 
 | Attribute | Type | Description |
 |---|---|---|
@@ -207,19 +207,21 @@ OsmfinderDownloadResult
 
 | Function | Search by | Returns |
 |---|---|---|
-| `get_extract_by_query` | name / id | `OsmfinderQueryResult` |
+| `find_extract_by_query` | name / id | `OsmfinderQueryResult` |
 | `get_available_extracts` | — | `list[OpenStreetMapExtract]` |
-| `download_extract_by_query` | name / id | `OsmfinderDownloadResult` |
-| `find_smallest_containing_extracts` | geometry | `OsmfinderGeometryResult` |
-| `find_and_download_extracts_pbf_files` | geometry | `OsmfinderDownloadResult` |
-| `download_extracts_pbf_files` | list of extracts | `list[Path]` |
+| `find_extracts_by_geometry` | geometry | `OsmfinderGeometryResult` |
+| `find_extracts_covering_point` | point | `list[OpenStreetMapExtract]` |
+| `download` | name / id / geometry / result / extracts | `OsmfinderDownloadResult` |
+| `find` | name / id / geometry | `OsmfinderQueryResult \| OsmfinderGeometryResult` |
 | `display_available_extracts` | — | prints a tree |
 | `clear_osm_index_cache` | — | clears the local index cache |
 
 > **Note:** `find()` and `download()` are dual-purpose helpers. When called with a **string query** they
 > return an `OsmfinderQueryResult` / `OsmfinderDownloadResult`. When called with a **geometry** they
-> return an `OsmfinderGeometryResult` / `OsmfinderDownloadResult`. Use the explicit
-> `get_extract_by_query` / `download_extract_by_query` if you want a single object without the list wrapper.
+> return an `OsmfinderGeometryResult` / `OsmfinderDownloadResult`. When called with a result or
+> extract list they return an `OsmfinderDownloadResult`. Use the explicit
+> `find_extract_by_query` / `find_extracts_by_geometry` if you want a single object without the
+> download wrapper.
 
 ## Index cache
 

@@ -70,13 +70,13 @@ def test_clear_help() -> None:
 
 
 def test_search_invokes_api(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test search command calls get_extract_by_query."""
+    """Test search command calls find_extract_by_query."""
     mock_result = MagicMock()
     mock_result.matched_extracts = []
     mock_result.extracts = []
     mock_result.sources_used = []
     mock_get = MagicMock(return_value=mock_result)
-    monkeypatch.setattr("osmfinder.cli.get_extract_by_query", mock_get)
+    monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
 
     result = runner.invoke(app, ["search", "Monaco"])
     assert result.exit_code == 0
@@ -90,7 +90,7 @@ def test_search_with_source(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_result.extracts = []
     mock_result.sources_used = []
     mock_get = MagicMock(return_value=mock_result)
-    monkeypatch.setattr("osmfinder.cli.get_extract_by_query", mock_get)
+    monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
 
     result = runner.invoke(app, ["search", "Monaco", "--source", "Geofabrik"])
     assert result.exit_code == 0
@@ -104,7 +104,7 @@ def test_search_with_multiple_sources(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_result.extracts = []
     mock_result.sources_used = []
     mock_get = MagicMock(return_value=mock_result)
-    monkeypatch.setattr("osmfinder.cli.get_extract_by_query", mock_get)
+    monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
 
     result = runner.invoke(app, ["search", "Monaco", "--source", "bbbike,osmfr"])
     assert result.exit_code == 0
@@ -114,7 +114,7 @@ def test_search_with_multiple_sources(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_search_error_handling(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test search command handles exceptions gracefully."""
     mock_get = MagicMock(side_effect=Exception("network error"))
-    monkeypatch.setattr("osmfinder.cli.get_extract_by_query", mock_get)
+    monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
 
     result = runner.invoke(app, ["search", "Monaco"])
     assert result.exit_code == 1
@@ -143,7 +143,7 @@ def test_search_zero_matches(monkeypatch: pytest.MonkeyPatch) -> None:
             matching_full_names=["geofabrik_europe_germany_berlin"],
         )
     )
-    monkeypatch.setattr("osmfinder.cli.get_extract_by_query", mock_get)
+    monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
 
     result = runner.invoke(app, ["search", "xyz"])
     assert result.exit_code == 1
@@ -185,7 +185,7 @@ def test_search_multiple_matches(monkeypatch: pytest.MonkeyPatch) -> None:
             matching_full_names=["bbbike_europe_monaco", "geofabrik_europe_monaco"],
         )
     )
-    monkeypatch.setattr("osmfinder.cli.get_extract_by_query", mock_get)
+    monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
 
     result = runner.invoke(app, ["search", "Monaco", "--no-select-first-match"])
     assert result.exit_code == 1
@@ -203,7 +203,7 @@ def test_search_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_result.sources_used = []
     mock_result.download = MagicMock()
     mock_get = MagicMock(return_value=mock_result)
-    monkeypatch.setattr("osmfinder.cli.get_extract_by_query", mock_get)
+    monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
 
     result = runner.invoke(app, ["search", "Monaco", "--dry-run"])
     assert result.exit_code == 0
@@ -224,9 +224,11 @@ def test_search_download_info(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     mock_result.extracts = [mock_extract]
     mock_result.matched_extracts = [mock_extract]
     mock_result.sources_used = []
-    mock_result.download.return_value = [Path("/tmp/test.osm.pbf")]
+    mock_dl = MagicMock()
+    mock_dl.download_paths = [Path("/tmp/test.osm.pbf")]
+    mock_result.download.return_value = mock_dl
     mock_get = MagicMock(return_value=mock_result)
-    monkeypatch.setattr("osmfinder.cli.get_extract_by_query", mock_get)
+    monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
 
     result = runner.invoke(app, ["search", "Monaco", "--output", str(tmp_path)])
     assert result.exit_code == 0
@@ -260,7 +262,7 @@ def test_search_results_sorted_by_area_then_id(monkeypatch: pytest.MonkeyPatch) 
     mock_result.extracts = []
     mock_result.sources_used = []
     mock_get = MagicMock(return_value=mock_result)
-    monkeypatch.setattr("osmfinder.cli.get_extract_by_query", mock_get)
+    monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
 
     result = runner.invoke(app, ["search", "test"])
     assert result.exit_code == 0
@@ -308,7 +310,7 @@ def test_covers_results_follow_steps_order(monkeypatch: pytest.MonkeyPatch) -> N
     mock_result.iou_threshold = 0.01
     mock_result.sources_used = []
     mock_find = MagicMock(return_value=mock_result)
-    monkeypatch.setattr("osmfinder.cli.find_smallest_containing_extracts", mock_find)
+    monkeypatch.setattr("osmfinder.cli.find_extracts_by_geometry", mock_find)
 
     result = runner.invoke(app, ["covers", "--bbox", "0,0,1,1", "--dry-run"])
     assert result.exit_code == 0
@@ -340,7 +342,7 @@ def test_list_with_multiple_sources(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_covers_invokes_api(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Test covers command calls find_smallest_containing_extracts."""
+    """Test covers command calls find_extracts_by_geometry."""
     from shapely.geometry import box
 
     mock_result = MagicMock()
@@ -352,7 +354,7 @@ def test_covers_invokes_api(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_result.sources_used = []
     mock_result.download = MagicMock()
     mock_find = MagicMock(return_value=mock_result)
-    monkeypatch.setattr("osmfinder.cli.find_smallest_containing_extracts", mock_find)
+    monkeypatch.setattr("osmfinder.cli.find_extracts_by_geometry", mock_find)
 
     result = runner.invoke(app, ["covers", "--bbox", "0,0,1,1"])
     assert result.exit_code == 0
@@ -388,7 +390,7 @@ def test_covers_dry_run(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_result.sources_used = []
     mock_result.download = MagicMock()
     mock_find = MagicMock(return_value=mock_result)
-    monkeypatch.setattr("osmfinder.cli.find_smallest_containing_extracts", mock_find)
+    monkeypatch.setattr("osmfinder.cli.find_extracts_by_geometry", mock_find)
 
     result = runner.invoke(app, ["covers", "--bbox", "0,0,1,1", "--dry-run"])
     assert result.exit_code == 0
@@ -412,9 +414,11 @@ def test_covers_download_info(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     mock_result.covered_geometry = box(0, 0, 1, 1)
     mock_result.iou_threshold = 0.01
     mock_result.sources_used = []
-    mock_result.download.return_value = [Path("/tmp/test.osm.pbf")]
+    mock_dl = MagicMock()
+    mock_dl.download_paths = [Path("/tmp/test.osm.pbf")]
+    mock_result.download.return_value = mock_dl
     mock_find = MagicMock(return_value=mock_result)
-    monkeypatch.setattr("osmfinder.cli.find_smallest_containing_extracts", mock_find)
+    monkeypatch.setattr("osmfinder.cli.find_extracts_by_geometry", mock_find)
 
     result = runner.invoke(app, ["covers", "--bbox", "0,0,1,1", "--output", str(tmp_path)])
     assert result.exit_code == 0

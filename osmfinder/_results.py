@@ -1,10 +1,12 @@
 """Result classes for osmfinder find and download operations."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING
 
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource  # noqa: TC001
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -56,7 +58,8 @@ class OsmfinderResult:
         self,
         download_directory: str | Path = "files",
         progressbar: bool = True,
-    ) -> list[Path]:
+        force_refresh: bool = False,
+    ) -> OsmfinderDownloadResult:
         """
         Download all extracts in this result as PBF files.
 
@@ -64,16 +67,19 @@ class OsmfinderResult:
             download_directory (Union[str, Path]): Directory where PBF files should be saved.
                 Defaults to "files".
             progressbar (bool, optional): Show progress bar. Defaults to True.
+            force_refresh (bool, optional): When ``True``, re-download even if the file already
+                exists. Defaults to False.
 
         Returns:
-            list[Path]: List of downloaded file paths.
+            OsmfinderDownloadResult: Result containing downloaded paths and find result.
         """
-        from osmfinder.finder import download_extracts
+        from osmfinder.finder import download
 
-        return download_extracts(
-            self.extracts,
+        return download(
+            self,
             download_directory=download_directory,
             progressbar=progressbar,
+            force_refresh=force_refresh,
         )
 
 
@@ -117,10 +123,10 @@ class OsmfinderQueryResult(OsmfinderResult):
 class OsmfinderGeometryResult(OsmfinderResult):
     """Result of a geometry query."""
 
-    input_geometry: "BaseGeometry"
-    covered_geometry: "BaseGeometry"
-    uncovered_geometry: "BaseGeometry"
-    steps: list["GeometryCoveringStep"]
+    input_geometry: BaseGeometry
+    covered_geometry: BaseGeometry
+    uncovered_geometry: BaseGeometry
+    steps: list[GeometryCoveringStep]
     iou_threshold: float
 
     @property
@@ -163,7 +169,7 @@ class OsmfinderGeometryResult(OsmfinderResult):
             f"  sources used: {_format_sources(self.sources_used)}"
         )
 
-    def plot(self, ax: "Axes | None" = None, legend: bool = True) -> "Axes":
+    def plot(self, ax: Axes | None = None, legend: bool = True) -> Axes:
         """
         Plot extracts with input geometry.
 
@@ -234,8 +240,8 @@ class GeometryCoveringStep:
     iou: float
     selected: bool
     reason: str
-    geometry_to_cover: "BaseGeometry"
-    intersection_geometry: "BaseGeometry"
+    geometry_to_cover: BaseGeometry
+    intersection_geometry: BaseGeometry
 
     def __repr__(self) -> str:
         return f"GeometryCoveringStep({self.extract.id}, {self.extract.name})"

@@ -20,8 +20,8 @@ from osmfinder.extract import clear_osm_index_cache
 from osmfinder.finder import (
     _get_index_for_sources,
     display_available_extracts,
-    find_smallest_containing_extracts,
-    get_extract_by_query,
+    find_extract_by_query,
+    find_extracts_by_geometry,
 )
 
 if TYPE_CHECKING:
@@ -299,7 +299,7 @@ def search_cmd(
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         try:
-            result = get_extract_by_query(
+            result = find_extract_by_query(
                 query,
                 source=source,
                 select_first_match=select_first_match,
@@ -322,11 +322,11 @@ def search_cmd(
             f"[bold blue]Downloading {len(result.extracts)} extract(s)...[/bold blue]"
         )
         try:
-            paths = result.download(
+            dl_result = result.download(
                 download_directory=output or Path("files"),
                 progressbar=progressbar,
             )
-            for path in paths:
+            for path in dl_result.download_paths:
                 err_console.print(f"[green]Downloaded:[/green] {path}")
         except Exception as ex:
             err_console.print(f"[red]Download error:[/red] {ex}")
@@ -501,7 +501,7 @@ def covers_cmd(
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         try:
-            result = find_smallest_containing_extracts(
+            result = find_extracts_by_geometry(
                 geometry,
                 source=source,
                 geometry_coverage_iou_threshold=iou_threshold,
@@ -520,11 +520,11 @@ def covers_cmd(
             f"[bold blue]Downloading {len(result.extracts)} extract(s)...[/bold blue]"
         )
         try:
-            paths = result.download(
+            dl_result = result.download(
                 download_directory=output or Path("files"),
                 progressbar=progressbar,
             )
-            for path in paths:
+            for path in dl_result.download_paths:
                 err_console.print(f"[green]Downloaded:[/green] {path}")
         except Exception as ex:
             err_console.print(f"[red]Download error:[/red] {ex}")

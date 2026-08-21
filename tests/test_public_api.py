@@ -13,16 +13,24 @@ from osmfinder.exceptions import OsmExtractMultipleMatchesError, OsmExtractZeroM
 def test_public_api_exposed() -> None:
     """Test if the public API surface is exposed at the package level."""
     for name in (
-        "get_extract_by_query",
+        "find_extract_by_query",
         "get_available_extracts",
-        "download_extract_by_query",
-        "find_smallest_containing_extracts",
+        "find_extracts_by_geometry",
         "find_extracts_covering_point",
-        "find_and_download_extracts_pbf_files",
         "display_available_extracts",
         "clear_osm_index_cache",
+        "download",
+        "find",
     ):
         assert hasattr(osmfinder, name)
+
+    for name in (
+        "get_extract_by_query",
+        "download_extract_by_query",
+        "find_smallest_containing_extracts",
+        "find_and_download_extracts_pbf_files",
+    ):
+        assert not hasattr(osmfinder, name)
 
 
 @pytest.mark.parametrize(
@@ -60,7 +68,7 @@ def test_smoke_end_to_end_query_flow(monkeypatch: pytest.MonkeyPatch, fake_index
     monkeypatch.setattr(finder, "_get_index_for_sources", lambda *args: fake_index)
 
     # Name query.
-    result = osmfinder.get_extract_by_query("Small")
+    result = osmfinder.find_extract_by_query("Small")
     assert result.extract.file_name == "big_small"
 
     # Geometry query.
@@ -116,7 +124,7 @@ def test_fuzzy_extract_name_queries(monkeypatch: pytest.MonkeyPatch, fake_index)
     for _ in range(50):
         query = "".join(rng.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(rng.randint(1, 8)))
         try:
-            result = osmfinder.get_extract_by_query(query, select_first_match=False)
+            result = osmfinder.find_extract_by_query(query, select_first_match=False)
         except (OsmExtractZeroMatchesError, OsmExtractMultipleMatchesError):
             continue
         assert result.extract.file_name in {"big", "big_small"}

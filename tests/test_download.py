@@ -16,28 +16,27 @@ from osmfinder.exceptions import (
     OsmExtractZeroMatchesError,
 )
 from osmfinder.finder import (
-    download_extract_by_query,
-    download_extracts_pbf_files,
-    find_and_download_extracts_pbf_files,
-    find_smallest_containing_extracts,
+    _download_extracts_pbf_files,
+    find_extract_by_query,
+    find_extracts_by_geometry,
 )
 from tests._helpers import _index_from_records
 
 
 def test_find_and_download_excludes_unavailable_extracts(mocker: MockerFixture) -> None:
-    """Test if unavailable extracts are excluded and the coverage is recalculated."""
+    """Test if unavailable extracts are reported in unavailable_extracts."""
     from requests.exceptions import HTTPError
     from rq_geo_toolkit.geocode import geocode_to_geometry
 
     geometry = geocode_to_geometry("Andorra")
-    # Use the finder directly to avoid downloading.
-    from osmfinder.finder import find_smallest_containing_extracts
-
-    matching_extracts = find_smallest_containing_extracts(geometry, "geofabrik")
+    matching_extracts = find_extracts_by_geometry(geometry, "geofabrik")
     failing_extract_id = matching_extracts.extracts[0].id
 
     def fake_download(
-        extract: OpenStreetMapExtract, download_directory: Path, progressbar: bool = True
+        extract: OpenStreetMapExtract,
+        download_directory: Path,
+        progressbar: bool = True,
+        force_refresh: bool = False,
     ) -> Path:
         if extract.id == failing_extract_id:
             raise HTTPError("Extract unavailable")
@@ -45,17 +44,17 @@ def test_find_and_download_excludes_unavailable_extracts(mocker: MockerFixture) 
 
     mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
 
-    with tempfile.TemporaryDirectory() as tmp_dir, pytest.warns(OsmExtractUnavailableWarning):
-        result = find_and_download_extracts_pbf_files(geometry, "geofabrik", tmp_dir)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        result = osmfinder.download(geometry, source="geofabrik", download_directory=tmp_dir)
 
     result_extracts_ids = {extract.id for extract in result.find_result.extracts}
-    assert failing_extract_id not in result_extracts_ids
-    assert result.download_paths
-    assert all(isinstance(pbf_path, Path) for pbf_path in result.download_paths)
+    assert failing_extract_id in result_extracts_ids
+    assert result.unavailable_extracts
+    assert result.unavailable_extracts[0].id == failing_extract_id
 
 
 def test_download_extracts_pbf_files_raises_on_unavailable(mocker: MockerFixture) -> None:
-    """Test if the public download function keeps raising on errors (back-compat)."""
+    """Test if the internal download helper keeps raising on errors (strict mode)."""
     from requests.exceptions import HTTPError
 
     extract = OpenStreetMapExtract(
@@ -73,7 +72,7 @@ def test_download_extracts_pbf_files_raises_on_unavailable(mocker: MockerFixture
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         with pytest.raises(HTTPError):
-            download_extracts_pbf_files([extract], Path(tmp_dir))
+            _download_extracts_pbf_files([extract], Path(tmp_dir), ignore_unavailable=False)
 
 
 def _two_vatican_city_index() -> "object":
@@ -109,7 +108,10 @@ def test_download_extract_by_query_redundancy(mocker: MockerFixture) -> None:
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
 
     def fake_download(
-        extract: OpenStreetMapExtract, download_directory: Path, progressbar: bool = True
+        extract: OpenStreetMapExtract,
+        download_directory: Path,
+        progressbar: bool = True,
+        force_refresh: bool = False,
     ) -> Path:
         # The smallest-area match (osmfr, 0.4) is selected first and must fail.
         if extract.id == "osmfr_vc":
@@ -159,22 +161,25 @@ def test_download_extract_by_query_zero_match(mocker: MockerFixture) -> None:
     index = _two_vatican_city_index()
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
+    with tempfile.TemporaryDirectory():
         with pytest.raises(OsmExtractZeroMatchesError):
-            download_extract_by_query("totally_nonexistent_extract", download_directory=tmp_dir)
+            find_extract_by_query("totally_nonexistent_extract")
 
 
 def test_find_and_download_unavailable_extracts_list(mocker: MockerFixture) -> None:
-    """Test if find_and_download returns unavailable_extracts list."""
+    """Test if download returns unavailable_extracts list for geometry queries."""
     from requests.exceptions import HTTPError
     from rq_geo_toolkit.geocode import geocode_to_geometry
 
     geometry = geocode_to_geometry("Andorra")
-    matching_extracts = find_smallest_containing_extracts(geometry, "geofabrik")
+    matching_extracts = find_extracts_by_geometry(geometry, "geofabrik")
     failing_extract_id = matching_extracts.extracts[0].id
 
     def fake_download(
-        extract: OpenStreetMapExtract, download_directory: Path, progressbar: bool = True
+        extract: OpenStreetMapExtract,
+        download_directory: Path,
+        progressbar: bool = True,
+        force_refresh: bool = False,
     ) -> Path:
         if extract.id == failing_extract_id:
             raise HTTPError("Extract unavailable")
@@ -182,8 +187,8 @@ def test_find_and_download_unavailable_extracts_list(mocker: MockerFixture) -> N
 
     mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
 
-    with tempfile.TemporaryDirectory() as tmp_dir, pytest.warns(OsmExtractUnavailableWarning):
-        result = find_and_download_extracts_pbf_files(geometry, "geofabrik", tmp_dir)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        result = osmfinder.download(geometry, source="geofabrik", download_directory=tmp_dir)
 
     assert len(result.unavailable_extracts) == 1
     assert result.unavailable_extracts[0].id == failing_extract_id
@@ -197,7 +202,10 @@ def test_download_extract_by_query_unavailable_list(mocker: MockerFixture) -> No
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
 
     def fake_download(
-        extract: OpenStreetMapExtract, download_directory: Path, progressbar: bool = True
+        extract: OpenStreetMapExtract,
+        download_directory: Path,
+        progressbar: bool = True,
+        force_refresh: bool = False,
     ) -> Path:
         if extract.id == "osmfr_vc":
             raise RequestsConnectionError("offline")
