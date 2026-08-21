@@ -18,18 +18,6 @@ from osmfinder.parsers.poly import parse_polygon_file
 
 OPENSTREETMAP_FR_POLYGONS_INDEX_URL = "https://download.openstreetmap.fr/polygons"
 OPENSTREETMAP_FR_EXTRACTS_INDEX_URL = "https://download.openstreetmap.fr/extracts"
-OPENSTREETMAP_FR_INDEX: OsmExtractsIndex | None = None
-
-__all__ = ["_get_openstreetmap_fr_index"]
-
-
-def _get_openstreetmap_fr_index(**kwargs: Any) -> OsmExtractsIndex:
-    global OPENSTREETMAP_FR_INDEX  # noqa: PLW0603
-
-    if OPENSTREETMAP_FR_INDEX is None:
-        OPENSTREETMAP_FR_INDEX = _load_openstreetmap_fr_index(**kwargs)
-
-    return OPENSTREETMAP_FR_INDEX
 
 
 @load_index_decorator(OsmExtractSource.osm_fr)

@@ -98,7 +98,6 @@ def test_generate_index_warning(mocker: MockerFixture) -> None:
                 )
             ],
         )
-        mocker.patch("osmfinder.sources.bbbike.BBBIKE_INDEX", new=None)
         with pytest.warns(MissingOsmCacheWarning):
             _load_bbbike_index(force_recalculation=True)
 
@@ -187,7 +186,7 @@ def test_old_index_warning(mocker: MockerFixture) -> None:
         "osmfinder.extract._get_file_creation_date",
         return_value=datetime.datetime.now() - relativedelta(years=1, days=1),
     )
-    mocker.patch("osmfinder.sources.bbbike.BBBIKE_INDEX", new=None)
+    mocker.patch("osmfinder.extract._index_cache", new={})
 
     with pytest.warns(OldOsmCacheWarning):
         display_available_extracts(source=extract_source)
