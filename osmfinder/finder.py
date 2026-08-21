@@ -6,6 +6,7 @@ repositories.
 """
 
 import difflib
+import importlib
 import warnings
 from collections.abc import Callable, Iterable
 from functools import partial
@@ -56,6 +57,8 @@ from osmfinder.extract import (
     clear_osm_index_cache,
 )
 from osmfinder.sources.tree import get_available_extracts_as_rich_tree
+
+importlib.import_module("osmfinder.sources")
 
 __all__ = [
     "download_extracts_pbf_files",
