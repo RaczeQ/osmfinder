@@ -53,7 +53,7 @@ def _iterate_bbbike_index() -> list[OpenStreetMapExtract]:  # pragma: no cover
     Works recursively, by scraping whole available directory.
 
     Returns:
-        List[OpenStreetMapExtract]: List of loaded osm.fr extracts objects.
+        list[OpenStreetMapExtract]: List of loaded bbbike extracts objects.
     """
     from bs4 import BeautifulSoup
 

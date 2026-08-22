@@ -66,12 +66,12 @@ class OsmfinderResult:
         Download all extracts in this result as PBF files.
 
         Args:
-            download_directory (Union[str, Path]): Directory where PBF files should be saved.
+            download_directory (str | Path): Directory where PBF files should be saved.
                 Defaults to "files".
-            progressbar (bool, optional): Show progress bar. Defaults to True.
-            force_refresh (bool, optional): When ``True``, re-download even if the file already
+            progressbar (bool): Show progress bar. Defaults to True.
+            force_refresh (bool): When ``True``, re-download even if the file already
                 exists. Defaults to False.
-            retry_on_unavailable (bool, optional): When ``True`` and this is a query or geometry
+            retry_on_unavailable (bool): When ``True`` and this is a query or geometry
                 result, unavailable extracts are excluded and the search is retried. When
                 ``False``, the result's extracts are downloaded as-is and unavailable extracts
                 raise an exception. Defaults to ``True``.

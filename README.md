@@ -97,6 +97,26 @@ osmfinder.display_available_extracts(source="Geofabrik") # source is optional
 extracts = osmfinder.get_available_extracts(source="Geofabrik") # source is optional
 for extract in extracts:
     print(extract.id, extract.file_name)
+
+## CLI
+
+The package also provides a Typer-based CLI.
+
+```bash
+# Search and download by name
+osmfinder search Monaco --output files/
+
+# List available extracts
+osmfinder list --source Geofabrik
+
+# Find extracts covering a bounding box
+osmfinder covers --bbox 2.11,48.77,2.54,48.98 --source Geofabrik
+
+# Find extracts from a GeoJSON file
+osmfinder covers --file area.geojson --output downloads/
+
+# Clear the local index cache
+osmfinder clear
 ```
 
 ### Sources
@@ -112,6 +132,19 @@ osmfinder.find_extract_by_query("Berlin", "geofabrik,bbbike")
 ## Result classes
 
 All find and download operations return typed result objects instead of raw lists.
+
+### `OpenStreetMapExtract`
+
+Metadata object returned by search and listing operations.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `id` | `str` | Unique extract identifier (e.g. `Geofabrik_monaco`) |
+| `name` | `str` | Human-readable extract name |
+| `parent` | `str` | Parent extract identifier in the source hierarchy |
+| `url` | `str` | Download URL for the `.osm.pbf` file |
+| `geometry` | `BaseGeometry` | Boundary polygon of the extract |
+| `file_name` | `str` | Full file name derived from the parent hierarchy |
 
 ### `OsmfinderQueryResult`
 

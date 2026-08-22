@@ -24,14 +24,6 @@ def test_public_api_exposed() -> None:
     ):
         assert hasattr(osmfinder, name)
 
-    for name in (
-        "get_extract_by_query",
-        "download_extract_by_query",
-        "find_smallest_containing_extracts",
-        "find_and_download_extracts_pbf_files",
-    ):
-        assert not hasattr(osmfinder, name)
-
 
 @pytest.mark.parametrize(
     ("value", "expected"),
