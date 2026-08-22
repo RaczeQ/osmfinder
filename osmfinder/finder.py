@@ -6,8 +6,9 @@ repositories.
 """
 
 import difflib
+import importlib
 import warnings
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from functools import partial
 from math import ceil
 from multiprocessing import cpu_count
@@ -51,13 +52,14 @@ from osmfinder.exceptions import (
     OsmExtractUnavailableWarning,
     OsmExtractZeroMatchesError,
 )
-from osmfinder.extract import clear_osm_index_cache
-from osmfinder.sources.bbbike import _get_bbbike_index
-from osmfinder.sources.geo2day import _get_geo2day_index
-from osmfinder.sources.geofabrik import _get_geofabrik_index
-from osmfinder.sources.movisda import _get_movisda_admin_index, _get_movisda_grid_index
-from osmfinder.sources.osm_fr import _get_openstreetmap_fr_index
+from osmfinder.extract import (
+    _REGISTERED_INDEX_LOADERS,
+    _get_registered_index,
+    clear_osm_index_cache,
+)
 from osmfinder.sources.tree import get_available_extracts_as_rich_tree
+
+importlib.import_module("osmfinder.sources")
 
 __all__ = [
     "download",
@@ -151,13 +153,8 @@ def _download_extracts_pbf_files(
     return downloaded, unavailable
 
 
-OSM_EXTRACT_SOURCE_INDEX_FUNCTION = {
-    OsmExtractSource.bbbike: _get_bbbike_index,
-    OsmExtractSource.geofabrik: _get_geofabrik_index,
-    OsmExtractSource.osm_fr: _get_openstreetmap_fr_index,
-    OsmExtractSource.geo2day: _get_geo2day_index,
-    OsmExtractSource.movisda_admin: _get_movisda_admin_index,
-    OsmExtractSource.movisda_grid: _get_movisda_grid_index,
+OSM_EXTRACT_SOURCE_INDEX_FUNCTION: dict[OsmExtractSource, Callable[..., OsmExtractsIndex]] = {
+    source: partial(_get_registered_index, source) for source in _REGISTERED_INDEX_LOADERS
 }
 
 # A single source, or multiple sources passed as an iterable or a comma-separated string.
@@ -389,7 +386,7 @@ def _resolve_extract_sources(source: OsmExtractSourceLike) -> list[OsmExtractSou
         if item not in seen:
             seen.add(item)
             deduplicated.append(item)
-    return deduplicated
+    return sorted(deduplicated, key=lambda s: s.value.lower())
 
 
 def _get_index_for_sources(source: OsmExtractSourceLike) -> OsmExtractsIndex:
