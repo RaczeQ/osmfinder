@@ -16,18 +16,6 @@ from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtract
 from osmfinder.extract import load_index_decorator
 
 GEOFABRIK_INDEX_URL = "https://download.geofabrik.de/index-v1.json"
-GEOFABRIK_INDEX: OsmExtractsIndex | None = None
-
-__all__ = ["_get_geofabrik_index"]
-
-
-def _get_geofabrik_index(**kwargs: Any) -> OsmExtractsIndex:
-    global GEOFABRIK_INDEX  # noqa: PLW0603
-
-    if GEOFABRIK_INDEX is None:
-        GEOFABRIK_INDEX = _load_geofabrik_index(**kwargs)
-
-    return GEOFABRIK_INDEX
 
 
 @load_index_decorator(OsmExtractSource.geofabrik, fast_build=True)

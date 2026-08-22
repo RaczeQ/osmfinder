@@ -41,6 +41,7 @@ from osmfinder.finder._query import (
     get_extract_by_query,
 )
 from osmfinder.finder._sources import (  # noqa: F401, attr-defined
+    OSM_EXTRACT_SOURCE_INDEX_FUNCTION,
     OsmExtractSourceLike,
     _get_combined_index,
     _get_index_for_sources,
@@ -66,6 +67,7 @@ __all__ = [
     "display_available_extracts",
     "get_available_extracts",
     "get_extract_by_query",
+    "OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
     "OsmExtractSourceLike",
     # Private helpers
     "_cover_geometry_with_extracts",

@@ -19,19 +19,6 @@ from osmfinder.extract import load_index_decorator
 from osmfinder.parsers.geojson import parse_geojson_file
 
 GEO2DAY_BASE_URL = "https://geo2day.com/"
-GEO2DAY_INDEX: OsmExtractsIndex | None = None
-
-
-__all__ = ["_get_geo2day_index"]
-
-
-def _get_geo2day_index(**kwargs: Any) -> OsmExtractsIndex:
-    global GEO2DAY_INDEX  # noqa: PLW0603
-
-    if GEO2DAY_INDEX is None:
-        GEO2DAY_INDEX = _load_geo2day_index(**kwargs)
-
-    return GEO2DAY_INDEX
 
 
 @load_index_decorator(OsmExtractSource.geo2day)

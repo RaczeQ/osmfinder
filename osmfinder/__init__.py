@@ -34,7 +34,7 @@ from osmfinder.finder import (
     get_extract_by_query,
 )
 
-__version__ = "0.1.0"
+__version__ = "1.0.1"
 
 __all__ = [
     "GeometryCoveringStep",

@@ -16,20 +16,20 @@ from osmfinder.exceptions import (
     OsmExtractSourceUnavailableWarning,
 )
 from osmfinder.extract import clear_osm_index_cache
-from osmfinder.sources.bbbike import _get_bbbike_index
-from osmfinder.sources.geo2day import _get_geo2day_index
-from osmfinder.sources.geofabrik import _get_geofabrik_index
-from osmfinder.sources.movisda import _get_movisda_admin_index, _get_movisda_grid_index
-from osmfinder.sources.osm_fr import _get_openstreetmap_fr_index
+from osmfinder.sources.bbbike import _load_bbbike_index
+from osmfinder.sources.geo2day import _load_geo2day_index
+from osmfinder.sources.geofabrik import _load_geofabrik_index
+from osmfinder.sources.movisda import _load_movisda_admin_index, _load_movisda_grid_index
+from osmfinder.sources.osm_fr import _load_openstreetmap_fr_index
 from osmfinder.sources.tree import get_available_extracts_as_rich_tree
 
 OSM_EXTRACT_SOURCE_INDEX_FUNCTION = {
-    OsmExtractSource.bbbike: _get_bbbike_index,
-    OsmExtractSource.geofabrik: _get_geofabrik_index,
-    OsmExtractSource.osm_fr: _get_openstreetmap_fr_index,
-    OsmExtractSource.geo2day: _get_geo2day_index,
-    OsmExtractSource.movisda_admin: _get_movisda_admin_index,
-    OsmExtractSource.movisda_grid: _get_movisda_grid_index,
+    OsmExtractSource.bbbike: _load_bbbike_index,
+    OsmExtractSource.geofabrik: _load_geofabrik_index,
+    OsmExtractSource.osm_fr: _load_openstreetmap_fr_index,
+    OsmExtractSource.geo2day: _load_geo2day_index,
+    OsmExtractSource.movisda_admin: _load_movisda_admin_index,
+    OsmExtractSource.movisda_grid: _load_movisda_grid_index,
 }
 
 OsmExtractSourceLike = OsmExtractSource | str | Iterable[OsmExtractSource | str]

@@ -21,30 +21,6 @@ MOVISDA_ADMIN_PBF_BASE_URL = "https://osm.download.movisda.io/admin"
 MOVISDA_GRID_GEOJSON_URL = "https://osm.download.movisda.io/grid/grid-latest.geojson"
 MOVISDA_GRID_PBF_BASE_URL = "https://osm.download.movisda.io/grid"
 
-MOVISDA_ADMIN_INDEX: OsmExtractsIndex | None = None
-MOVISDA_GRID_INDEX: OsmExtractsIndex | None = None
-
-
-__all__ = ["_get_movisda_admin_index", "_get_movisda_grid_index"]
-
-
-def _get_movisda_admin_index(**kwargs: Any) -> OsmExtractsIndex:
-    global MOVISDA_ADMIN_INDEX  # noqa: PLW0603
-
-    if MOVISDA_ADMIN_INDEX is None:
-        MOVISDA_ADMIN_INDEX = _load_movisda_admin_index(**kwargs)
-
-    return MOVISDA_ADMIN_INDEX
-
-
-def _get_movisda_grid_index(**kwargs: Any) -> OsmExtractsIndex:
-    global MOVISDA_GRID_INDEX  # noqa: PLW0603
-
-    if MOVISDA_GRID_INDEX is None:
-        MOVISDA_GRID_INDEX = _load_movisda_grid_index(**kwargs)
-
-    return MOVISDA_GRID_INDEX
-
 
 @load_index_decorator(OsmExtractSource.movisda_admin, fast_build=True)
 def _load_movisda_admin_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cover

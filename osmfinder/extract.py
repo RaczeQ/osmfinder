@@ -25,6 +25,8 @@ from osmfinder.exceptions import (
 LFS_DIRECTORY_URL = "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/precalculated_indexes"
 
 _QUICK_REFRESH_SOURCES: set[OsmExtractSource] = set()
+_REGISTERED_INDEX_LOADERS: dict[OsmExtractSource, Callable[..., OsmExtractsIndex]] = {}
+_index_cache: dict[OsmExtractSource, OsmExtractsIndex] = {}
 
 
 def load_index_decorator(
@@ -98,7 +100,7 @@ def load_index_decorator(
                 if not fast_build:
                     quick_refresh_names = ", ".join(sorted(s.value for s in _QUICK_REFRESH_SOURCES))
                     warnings.warn(
-                        f"Library has to build an index for the {extract_source} provider."
+                        f"Library has to build an index for the {extract_source.value} provider."
                         " This can take multiple minutes. To avoid waiting, use one of the"
                         f" quick-refresh sources that load from a single file:"
                         f" {quick_refresh_names}.",
@@ -127,9 +129,26 @@ def load_index_decorator(
 
             return index
 
+        _REGISTERED_INDEX_LOADERS[extract_source] = wrapper
         return wrapper
 
     return inner
+
+
+def _get_registered_index(extract_source: OsmExtractSource, **kwargs: Any) -> OsmExtractsIndex:
+    """Return a memoized index for a registered extract source."""
+    force_recalculation = kwargs.get("force_recalculation", False)
+    if extract_source not in _index_cache or force_recalculation:
+        _index_cache[extract_source] = _REGISTERED_INDEX_LOADERS[extract_source](**kwargs)
+    return _index_cache[extract_source]
+
+
+def _clear_in_memory_cache(extract_source: OsmExtractSource | None = None) -> None:
+    """Clear the in-memory index cache."""
+    if extract_source is not None:
+        _index_cache.pop(extract_source, None)
+    else:
+        _index_cache.clear()
 
 
 @overload
@@ -165,6 +184,8 @@ def clear_osm_index_cache(extract_source: OsmExtractSource | None = None) -> Non
         ):
             for path in (cache_path, _invalidated_cache_path(cache_path)):
                 path.unlink(missing_ok=True)
+
+    _clear_in_memory_cache(extract_source)
 
 
 def _get_global_cache_file_path(extract_source: OsmExtractSource) -> Path:
