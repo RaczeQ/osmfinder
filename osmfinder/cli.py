@@ -20,6 +20,7 @@ from osmfinder.extract import clear_osm_index_cache
 from osmfinder.finder import (
     _get_index_for_sources,
     display_available_extracts,
+    download,
     find_extract_by_query,
     find_extracts_by_geometry,
 )
@@ -322,12 +323,17 @@ def search_cmd(
             f"[bold blue]Downloading {len(result.extracts)} extract(s)...[/bold blue]"
         )
         try:
-            dl_result = result.download(
+            dl_result = download(
+                query,
+                source=source,
                 download_directory=output or Path("files"),
+                select_first_match=select_first_match,
                 progressbar=progressbar,
             )
             for path in dl_result.download_paths:
                 err_console.print(f"[green]Downloaded:[/green] {path}")
+            for extract in dl_result.unavailable_extracts:
+                err_console.print(f"[yellow]Unavailable:[/yellow] {extract.file_name}")
         except Exception as ex:
             err_console.print(f"[red]Download error:[/red] {ex}")
             raise typer.Exit(code=1) from None
@@ -522,12 +528,20 @@ def covers_cmd(
             f"[bold blue]Downloading {len(result.extracts)} extract(s)...[/bold blue]"
         )
         try:
-            dl_result = result.download(
+            dl_result = download(
+                geometry,
+                source=source,
                 download_directory=output or Path("files"),
+                geometry_coverage_iou_threshold=iou_threshold,
+                allow_uncovered_geometry=allow_uncovered_geometry,
+                force_single_result=single_result,
+                single_result_iou_threshold=single_iou_threshold,
                 progressbar=progressbar,
             )
             for path in dl_result.download_paths:
                 err_console.print(f"[green]Downloaded:[/green] {path}")
+            for extract in dl_result.unavailable_extracts:
+                err_console.print(f"[yellow]Unavailable:[/yellow] {extract.file_name}")
         except Exception as ex:
             err_console.print(f"[red]Download error:[/red] {ex}")
             raise typer.Exit(code=1) from None

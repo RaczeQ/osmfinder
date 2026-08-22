@@ -77,6 +77,8 @@ def test_search_invokes_api(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_result.sources_used = []
     mock_get = MagicMock(return_value=mock_result)
     monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
+    mock_download = MagicMock(return_value=MagicMock(download_paths=[], unavailable_extracts=[]))
+    monkeypatch.setattr("osmfinder.cli.download", mock_download)
 
     result = runner.invoke(app, ["search", "Monaco"])
     assert result.exit_code == 0
@@ -91,6 +93,8 @@ def test_search_with_source(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_result.sources_used = []
     mock_get = MagicMock(return_value=mock_result)
     monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
+    mock_download = MagicMock(return_value=MagicMock(download_paths=[], unavailable_extracts=[]))
+    monkeypatch.setattr("osmfinder.cli.download", mock_download)
 
     result = runner.invoke(app, ["search", "Monaco", "--source", "Geofabrik"])
     assert result.exit_code == 0
@@ -105,6 +109,8 @@ def test_search_with_multiple_sources(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_result.sources_used = []
     mock_get = MagicMock(return_value=mock_result)
     monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
+    mock_download = MagicMock(return_value=MagicMock(download_paths=[], unavailable_extracts=[]))
+    monkeypatch.setattr("osmfinder.cli.download", mock_download)
 
     result = runner.invoke(app, ["search", "Monaco", "--source", "bbbike,osmfr"])
     assert result.exit_code == 0
@@ -224,17 +230,18 @@ def test_search_download_info(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     mock_result.extracts = [mock_extract]
     mock_result.matched_extracts = [mock_extract]
     mock_result.sources_used = []
-    mock_dl = MagicMock()
-    mock_dl.download_paths = [Path("/tmp/test.osm.pbf")]
-    mock_result.download.return_value = mock_dl
     mock_get = MagicMock(return_value=mock_result)
     monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
+    mock_dl = MagicMock()
+    mock_dl.download_paths = [Path("/tmp/test.osm.pbf")]
+    mock_download = MagicMock(return_value=mock_dl)
+    monkeypatch.setattr("osmfinder.cli.download", mock_download)
 
     result = runner.invoke(app, ["search", "Monaco", "--output", str(tmp_path)])
     assert result.exit_code == 0
     assert "Downloading" in result.output
     assert "Downloaded" in result.output
-    mock_result.download.assert_called_once()
+    mock_download.assert_called_once()
 
 
 def test_search_results_sorted_by_area_then_id(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -263,6 +270,8 @@ def test_search_results_sorted_by_area_then_id(monkeypatch: pytest.MonkeyPatch) 
     mock_result.sources_used = []
     mock_get = MagicMock(return_value=mock_result)
     monkeypatch.setattr("osmfinder.cli.find_extract_by_query", mock_get)
+    mock_download = MagicMock(return_value=MagicMock(download_paths=[], unavailable_extracts=[]))
+    monkeypatch.setattr("osmfinder.cli.download", mock_download)
 
     result = runner.invoke(app, ["search", "test"])
     assert result.exit_code == 0
@@ -414,17 +423,18 @@ def test_covers_download_info(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     mock_result.covered_geometry = box(0, 0, 1, 1)
     mock_result.iou_threshold = 0.01
     mock_result.sources_used = []
-    mock_dl = MagicMock()
-    mock_dl.download_paths = [Path("/tmp/test.osm.pbf")]
-    mock_result.download.return_value = mock_dl
     mock_find = MagicMock(return_value=mock_result)
     monkeypatch.setattr("osmfinder.cli.find_extracts_by_geometry", mock_find)
+    mock_dl = MagicMock()
+    mock_dl.download_paths = [Path("/tmp/test.osm.pbf")]
+    mock_download = MagicMock(return_value=mock_dl)
+    monkeypatch.setattr("osmfinder.cli.download", mock_download)
 
     result = runner.invoke(app, ["covers", "--bbox", "0,0,1,1", "--output", str(tmp_path)])
     assert result.exit_code == 0
     assert "Downloading" in result.output
     assert "Downloaded" in result.output
-    mock_result.download.assert_called_once()
+    mock_download.assert_called_once()
 
 
 def test_clear_invokes_api(monkeypatch: pytest.MonkeyPatch) -> None:

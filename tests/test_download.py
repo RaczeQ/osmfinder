@@ -24,7 +24,7 @@ from tests._helpers import _index_from_records
 
 
 def test_find_and_download_excludes_unavailable_extracts(mocker: MockerFixture) -> None:
-    """Test if unavailable extracts are reported in unavailable_extracts."""
+    """Test if unavailable extracts are excluded and retried with alternatives."""
     from requests.exceptions import HTTPError
     from rq_geo_toolkit.geocode import geocode_to_geometry
 
@@ -48,9 +48,10 @@ def test_find_and_download_excludes_unavailable_extracts(mocker: MockerFixture) 
         result = osmfinder.download(geometry, source="geofabrik", download_directory=tmp_dir)
 
     result_extracts_ids = {extract.id for extract in result.find_result.extracts}
-    assert failing_extract_id in result_extracts_ids
+    assert failing_extract_id not in result_extracts_ids
     assert result.unavailable_extracts
     assert result.unavailable_extracts[0].id == failing_extract_id
+    assert len(result.download_paths) >= 1
 
 
 def test_download_extracts_pbf_files_raises_on_unavailable(mocker: MockerFixture) -> None:
