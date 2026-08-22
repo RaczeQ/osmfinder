@@ -109,14 +109,14 @@ The package also provides a [Typer](https://typer.tiangolo.com/)-based CLI.
 # Search and download by name
 osmfinder search Monaco --output files/
 
-# List available extracts
-osmfinder list --source Geofabrik
-
 # Find extracts covering a bounding box
 osmfinder covers --bbox 2.11,48.77,2.54,48.98 --source Geofabrik
 
 # Find extracts from a GeoJSON file
 osmfinder covers --file area.geojson --output downloads/
+
+# List available extracts
+osmfinder list --source Geofabrik
 
 # Clear the local index cache
 osmfinder clear
