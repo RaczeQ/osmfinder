@@ -40,6 +40,8 @@ pip install osmfinder
 
 ## Usage
 
+### Python
+
 ```python
 import osmfinder
 from shapely.geometry import box
@@ -97,10 +99,11 @@ osmfinder.display_available_extracts(source="Geofabrik") # source is optional
 extracts = osmfinder.get_available_extracts(source="Geofabrik") # source is optional
 for extract in extracts:
     print(extract.id, extract.file_name)
+```
 
-## CLI
+### CLI
 
-The package also provides a Typer-based CLI.
+The package also provides a [Typer](https://typer.tiangolo.com/)-based CLI.
 
 ```bash
 # Search and download by name
