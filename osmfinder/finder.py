@@ -33,6 +33,7 @@ from osmfinder._results import (
     OsmfinderDownloadResult,
     OsmfinderGeometryResult,
     OsmfinderQueryResult,
+    OsmfinderResult,
 )
 from osmfinder._typing import (
     OpenStreetMapExtract,
@@ -61,62 +62,46 @@ from osmfinder.sources.tree import get_available_extracts_as_rich_tree
 importlib.import_module("osmfinder.sources")
 
 __all__ = [
-    "download_extracts_pbf_files",
-    "find_and_download_extracts_pbf_files",
+    "download",
+    "find",
+    "find_extract_by_query",
+    "find_extracts_by_geometry",
     "find_extracts_covering_point",
-    "find_smallest_containing_extracts",
-    "clear_osm_index_cache",
-    "get_extract_by_query",
     "get_available_extracts",
-    "download_extract_by_query",
     "display_available_extracts",
+    "clear_osm_index_cache",
     "OsmExtractSource",
+    "OsmExtractSourceLike",
 ]
 
 
-def download_extracts_pbf_files(
-    extracts: list[OpenStreetMapExtract], download_directory: Path, progressbar: bool = True
-) -> list[Path]:
-    """
-    Download OSM extracts as PBF files.
-
-    Args:
-        extracts (list[OpenStreetMapExtract]): List of extracts to download.
-        download_directory (Path): Directory where PBF files should be saved.
-        progressbar (bool, optional): Show progress bar. Defaults to True.
-
-    Returns:
-        list[Path]: List of downloaded file paths.
-
-    Examples:
-        >>> import osmfinder
-        >>> from pathlib import Path
-        >>> # Requires a valid extract list; typically obtained from find() first.
-        >>> # extracts = osmfinder.find("Monaco")
-        >>> # paths = osmfinder.download_extracts_pbf_files(
-        >>> #     extracts, download_directory=Path("files")
-        >>> # )
-        >>> # paths is a list of Path objects pointing to downloaded .osm.pbf files
-    """
-    downloaded, _ = _download_extracts_pbf_files(
-        extracts, download_directory, progressbar=progressbar, ignore_unavailable=False
-    )
-    return [path for _, path in downloaded]
-
-
 def _download_single_extract(
-    extract: OpenStreetMapExtract, download_directory: Path, progressbar: bool = True
+    extract: OpenStreetMapExtract,
+    download_directory: Path,
+    progressbar: bool = True,
+    force_refresh: bool = False,
 ) -> Path:
     """Download a single OSM extract as a PBF file."""
-    file_path = retrieve(
-        extract.url,
-        fname=f"{extract.file_name}.osm.pbf",
-        path=download_directory,
-        progressbar=progressbar and not FORCE_TERMINAL,
-        known_hash=None,
-        downloader=HTTPDownloader(timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS),
-    )
-    return Path(file_path)
+    target_path = download_directory / f"{extract.file_name}.osm.pbf"
+
+    if target_path.exists() and not force_refresh:
+        return target_path
+
+    import shutil
+    import tempfile
+
+    with tempfile.TemporaryDirectory(dir=download_directory) as tmp_dir:
+        downloaded = retrieve(
+            extract.url,
+            fname=f"{extract.file_name}.osm.pbf",
+            path=tmp_dir,
+            progressbar=progressbar and not FORCE_TERMINAL,
+            known_hash=None,
+            downloader=HTTPDownloader(timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS),
+        )
+        shutil.move(downloaded, target_path)
+
+    return target_path
 
 
 def _download_extracts_pbf_files(
@@ -124,6 +109,7 @@ def _download_extracts_pbf_files(
     download_directory: Path,
     progressbar: bool = True,
     ignore_unavailable: bool = False,
+    force_refresh: bool = False,
 ) -> tuple[list[tuple[OpenStreetMapExtract, Path]], list[OpenStreetMapExtract]]:
     """
     Download OSM extracts as PBF files, optionally tolerating unavailable ones.
@@ -134,6 +120,8 @@ def _download_extracts_pbf_files(
         progressbar (bool, optional): Show progress bar. Defaults to True.
         ignore_unavailable (bool, optional): If `True`, network errors for a single extract
             are caught and the extract is reported as unavailable instead of raising.
+            Defaults to `False`.
+        force_refresh (bool, optional): When `True`, re-download even if the file already exists.
             Defaults to `False`.
 
     Returns:
@@ -148,16 +136,18 @@ def _download_extracts_pbf_files(
     unavailable: list[OpenStreetMapExtract] = []
 
     for extract in extracts:
-        if not ignore_unavailable:
-            downloaded.append(
-                (extract, _download_single_extract(extract, download_directory, progressbar))
-            )
-            continue
         try:
             downloaded.append(
-                (extract, _download_single_extract(extract, download_directory, progressbar))
+                (
+                    extract,
+                    _download_single_extract(
+                        extract, download_directory, progressbar, force_refresh=force_refresh
+                    ),
+                )
             )
         except RequestException:
+            if not ignore_unavailable:
+                raise
             unavailable.append(extract)
 
     return downloaded, unavailable
@@ -169,6 +159,181 @@ OSM_EXTRACT_SOURCE_INDEX_FUNCTION: dict[OsmExtractSource, Callable[..., OsmExtra
 
 # A single source, or multiple sources passed as an iterable or a comma-separated string.
 OsmExtractSourceLike = OsmExtractSource | str | Iterable[OsmExtractSource | str]
+
+
+def _download_with_retry_query(
+    query: str,
+    source: OsmExtractSourceLike,
+    download_directory: Path,
+    *,
+    select_first_match: bool = True,
+    progressbar: bool = True,
+    force_refresh: bool = False,
+) -> OsmfinderDownloadResult:
+    """
+    Download a query string, retrying with alternative extracts if some are unavailable.
+
+    Args:
+        query: Text query to search for.
+        source: OSM source name.
+        download_directory: Where to save files.
+        select_first_match: When multiple extracts match, select the first one with a warning.
+        progressbar: Show progress bar.
+        force_refresh: Re-download existing files.
+
+    Returns:
+        OsmfinderDownloadResult: Result containing downloaded paths and find result.
+
+    Raises:
+        OsmExtractZeroMatchesError: If no extracts match the query.
+        OsmExtractsUnavailableError: If all matching extracts are unavailable for download.
+    """
+    excluded_ids: set[str] = set()
+    all_unavailable: list[OpenStreetMapExtract] = []
+
+    while True:
+        try:
+            find_result = find_extract_by_query(
+                query,
+                source=source,
+                select_first_match=select_first_match,
+                excluded_extracts_ids=excluded_ids,
+            )
+        except OsmExtractZeroMatchesError:
+            if not all_unavailable:
+                raise
+            raise OsmExtractsUnavailableError(
+                f'All extracts matching query "{query.strip()}" are unavailable for download'
+                f" ({', '.join(e.file_name for e in all_unavailable)})."
+                " Check your internet connection or try a different source.",
+                matching_full_names=sorted(e.file_name for e in all_unavailable),
+            ) from None
+
+        extracts = find_result.extracts
+        if not extracts:
+            break
+
+        downloaded, unavailable = _download_extracts_pbf_files(
+            extracts,
+            download_directory,
+            progressbar=progressbar,
+            ignore_unavailable=True,
+            force_refresh=force_refresh,
+        )
+        all_unavailable.extend(unavailable)
+
+        if not unavailable:
+            return OsmfinderDownloadResult(
+                find_result=find_result,
+                download_paths=[path for _, path in downloaded],
+                unavailable_extracts=all_unavailable,
+            )
+
+        warnings.warn(
+            f'Matched extract "{unavailable[0].file_name}" is unavailable.'
+            " Excluding it and trying the next matching extract.",
+            OsmExtractUnavailableWarning,
+            stacklevel=0,
+        )
+        excluded_ids.update(e.id for e in unavailable)
+
+    return OsmfinderDownloadResult(
+        find_result=find_result,
+        download_paths=[],
+        unavailable_extracts=all_unavailable,
+    )
+
+
+def _download_with_retry_geometry(
+    geometry: BaseGeometry,
+    source: OsmExtractSourceLike,
+    download_directory: Path,
+    *,
+    geometry_coverage_iou_threshold: float = 0.01,
+    allow_uncovered_geometry: bool = False,
+    force_single_result: bool = False,
+    single_result_iou_threshold: float = 0.99,
+    progressbar: bool = True,
+    force_refresh: bool = False,
+) -> OsmfinderDownloadResult:
+    """
+    Download geometry coverage, retrying without unavailable extracts.
+
+    Args:
+        geometry: Geometry to cover.
+        source: OSM source name.
+        download_directory: Where to save files.
+        geometry_coverage_iou_threshold: Minimal IoU for selecting extracts.
+        allow_uncovered_geometry: Suppress error if geometry parts aren't covered.
+        force_single_result: Return only the single best extract.
+        single_result_iou_threshold: Minimal IoU for selecting a single result.
+        progressbar: Show progress bar.
+        force_refresh: Re-download existing files.
+
+    Returns:
+        OsmfinderDownloadResult: Result containing downloaded paths and find result.
+
+    Raises:
+        GeometryNotCoveredError: If no extracts cover the geometry.
+    """
+    excluded_ids: set[str] = set()
+    all_unavailable: list[OpenStreetMapExtract] = []
+
+    while True:
+        try:
+            find_result = find_extracts_by_geometry(
+                geometry,
+                source=source,
+                geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
+                allow_uncovered_geometry=allow_uncovered_geometry,
+                excluded_extracts_ids=excluded_ids,
+                force_single_result=force_single_result,
+                single_result_iou_threshold=single_result_iou_threshold,
+            )
+        except GeometryNotCoveredError:
+            if not all_unavailable:
+                raise
+            raise GeometryNotCoveredError(
+                "Couldn't find extracts covering given geometry."
+                f" Some extracts were unavailable for download"
+                f" ({', '.join(e.file_name for e in all_unavailable)})."
+                " Check your internet connection or try a different source.",
+            ) from None
+
+        extracts = find_result.extracts
+        if not extracts:
+            break
+
+        downloaded, unavailable = _download_extracts_pbf_files(
+            extracts,
+            download_directory,
+            progressbar=progressbar,
+            ignore_unavailable=True,
+            force_refresh=force_refresh,
+        )
+        all_unavailable.extend(unavailable)
+
+        if not unavailable:
+            return OsmfinderDownloadResult(
+                find_result=find_result,
+                download_paths=[path for _, path in downloaded],
+                unavailable_extracts=all_unavailable,
+            )
+
+        unavailable_names = ", ".join(e.file_name for e in unavailable)
+        warnings.warn(
+            "Some extracts are unavailable and will be excluded from the search"
+            f" ({unavailable_names}). Recalculating coverage without them.",
+            OsmExtractUnavailableWarning,
+            stacklevel=0,
+        )
+        excluded_ids.update(e.id for e in unavailable)
+
+    return OsmfinderDownloadResult(
+        find_result=find_result,
+        download_paths=[],
+        unavailable_extracts=all_unavailable,
+    )
 
 
 def _resolve_extract_sources(source: OsmExtractSourceLike) -> list[OsmExtractSource]:
@@ -270,15 +435,15 @@ def _get_combined_index() -> OsmExtractsIndex:
 
 
 @overload
-def get_extract_by_query(query: str) -> OsmfinderQueryResult: ...
+def find_extract_by_query(query: str) -> OsmfinderQueryResult: ...
 
 
 @overload
-def get_extract_by_query(query: str, source: OsmExtractSourceLike) -> OsmfinderQueryResult: ...
+def find_extract_by_query(query: str, source: OsmExtractSourceLike) -> OsmfinderQueryResult: ...
 
 
 @overload
-def get_extract_by_query(
+def find_extract_by_query(
     query: str,
     *,
     select_first_match: bool = ...,
@@ -287,7 +452,7 @@ def get_extract_by_query(
 
 
 @overload
-def get_extract_by_query(
+def find_extract_by_query(
     query: str,
     source: OsmExtractSourceLike,
     select_first_match: bool = ...,
@@ -295,7 +460,7 @@ def get_extract_by_query(
 ) -> OsmfinderQueryResult: ...
 
 
-def get_extract_by_query(
+def find_extract_by_query(
     query: str,
     source: OsmExtractSourceLike = "any",
     select_first_match: bool = True,
@@ -307,13 +472,13 @@ def get_extract_by_query(
     Args:
         query (str): Query to search for a particular extract.
         source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
-            'BBBike', 'OSM_fr', or an iterable / comma-separated string of those
-            (e.g. ['BBBike', 'OSM_fr'] or 'bbbike,osmfr'). Defaults to 'any'.
+            'BBBike', 'osmfr', or an iterable / comma-separated string of those
+            (e.g. ['BBBike', 'osmfr'] or 'bbbike,osmfr'). Defaults to 'any'.
         select_first_match (bool): When multiple extracts match the query by name, select the
             first one (sorted by area ascending, then id) and emit a warning instead of raising
             an error. Set to `False` to raise `OsmExtractMultipleMatchesError` instead.
             Defaults to `True`.
-        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
+        excluded_extracts_ids (set[str] | None): Set of extract ids to exclude from the search.
             Useful for skipping extracts that are unavailable for download. Defaults to `None`.
 
     Returns:
@@ -321,9 +486,7 @@ def get_extract_by_query(
 
     Examples:
         >>> import osmfinder
-        >>> result = osmfinder.get_extract_by_query("Monaco")
-        >>> isinstance(result, osmfinder.OsmfinderQueryResult)
-        True
+        >>> result = osmfinder.find_extract_by_query("Monaco")
         >>> result.extracts[0].id
         'Movisda-admin_MC'
         >>> result.extracts[0].file_name
@@ -443,221 +606,6 @@ def get_extract_by_query(
         raise ValueError(f"Unknown OSM extracts source: {source}.") from ex
 
 
-@overload
-def download_extract_by_query(
-    query: str,
-    *,
-    download_directory: str | Path = "files",
-    progressbar: bool = True,
-    select_first_match: bool = True,
-) -> OsmfinderDownloadResult: ...
-
-
-@overload
-def download_extract_by_query(
-    query: str,
-    source: OsmExtractSourceLike,
-    *,
-    download_directory: str | Path = "files",
-    progressbar: bool = True,
-    select_first_match: bool = True,
-) -> OsmfinderDownloadResult: ...
-
-
-def download_extract_by_query(
-    query: str,
-    source: OsmExtractSourceLike = "any",
-    download_directory: str | Path = "files",
-    progressbar: bool = True,
-    select_first_match: bool = True,
-) -> OsmfinderDownloadResult:
-    """
-    Download an OSM extract by name.
-
-    Args:
-        query (str): Query to search for a particular extract.
-        source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
-            'BBBike', 'OSM_fr', or an iterable / comma-separated string of those
-            (e.g. ['BBBike', 'OSM_fr'] or 'bbbike,osmfr'). Defaults to 'any'.
-        download_directory (Union[str, Path], optional): Directory where the file should be
-            downloaded. Defaults to "files".
-        progressbar (bool, optional): Show progress bar. Defaults to True.
-        select_first_match (bool, optional): When multiple extracts match the query by name,
-            select the first one (sorted by area ascending, then id) with a warning instead of
-            raising an error. Defaults to `True`.
-
-    Returns:
-        OsmfinderDownloadResult: Result containing the downloaded path and find result.
-
-    Examples:
-        >>> import osmfinder
-        >>> from pathlib import Path
-        >>> result = osmfinder.download_extract_by_query(
-        ...     "Monaco", download_directory="/tmp/osmfinder-doctest"
-        ... )
-        >>> isinstance(result, osmfinder.OsmfinderDownloadResult)
-        True
-        >>> isinstance(result.download_paths[0], Path)
-        True
-        >>> result.download_paths[0].name
-        'movisda-admin_monaco.osm.pbf'
-        >>> result.find_result.extracts[0].id
-        'Movisda-admin_MC'
-    """
-    download_directory = Path(download_directory)
-    excluded_extracts_ids: set[str] = set()
-    unavailable_file_names: list[str] = []
-    all_unavailable: list[OpenStreetMapExtract] = []
-
-    while True:
-        try:
-            query_result = get_extract_by_query(
-                query,
-                source,
-                select_first_match=select_first_match,
-                excluded_extracts_ids=excluded_extracts_ids,
-            )
-            matching_extract = query_result.extracts[0]
-        except OsmExtractZeroMatchesError:
-            if not unavailable_file_names:
-                raise
-            raise OsmExtractsUnavailableError(
-                f'All extracts matching query "{query.strip()}" are unavailable for download'
-                f" ({', '.join(unavailable_file_names)})."
-                " Check your internet connection or try a different source.",
-                matching_full_names=sorted(unavailable_file_names),
-            ) from None
-
-        downloaded, unavailable = _download_extracts_pbf_files(
-            [matching_extract],
-            download_directory,
-            progressbar=progressbar,
-            ignore_unavailable=True,
-        )
-        all_unavailable.extend(unavailable)
-
-        if not unavailable:
-            return OsmfinderDownloadResult(
-                find_result=query_result,
-                download_paths=[downloaded[0][1]],
-                unavailable_extracts=all_unavailable,
-            )
-
-        warnings.warn(
-            f'Matched extract "{matching_extract.file_name}" is unavailable.'
-            " Excluding it and trying the next matching extract.",
-            OsmExtractUnavailableWarning,
-            stacklevel=0,
-        )
-        excluded_extracts_ids.add(matching_extract.id)
-        unavailable_file_names.append(matching_extract.file_name)
-
-
-def find_and_download_extracts_pbf_files(
-    geometry: BaseGeometry,
-    source: OsmExtractSourceLike = "any",
-    download_directory: str | Path = "files",
-    geometry_coverage_iou_threshold: float = 0.01,
-    allow_uncovered_geometry: bool = False,
-    force_single_result: bool = False,
-    single_result_iou_threshold: float = 0.99,
-    progressbar: bool = True,
-) -> OsmfinderDownloadResult:
-    """
-    Find the smallest set of extracts covering a geometry and download them as PBF files.
-
-    Searches for the smallest set of extracts covering a given geometry and downloads them.
-    If any matching extract turns out to be unavailable (e.g. removed from the provider or
-    a temporary server error), it is excluded and the coverage is recalculated using the
-    remaining extracts, until a fully downloadable set is found or the geometry can no longer
-    be covered.
-
-    Args:
-        geometry (BaseGeometry): Geometry to be covered.
-        source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
-            'BBBike', 'OSMfr', or an iterable / comma-separated string of those
-            (e.g. ['BBBike', 'OSM_fr'] or 'bbbike,osmfr'). Defaults to 'any'.
-        download_directory (Union[str, Path]): Directory where PBF files should be saved.
-            Defaults to "files".
-        geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union metric
-            for selecting the matching OSM extracts. Has to be in range between 0 and 1.
-            Defaults to 0.01.
-        allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
-            by any OSM extract. Defaults to `False`.
-        force_single_result (bool): When ``True``, return only the smallest extract that best covers
-            the geometry. If ``allow_uncovered_geometry`` is ``False``, the smallest fully
-            containing extract is returned. If ``allow_uncovered_geometry`` is ``True``, the
-            extract with the highest IoU above ``single_result_iou_threshold`` is returned.
-            If no candidate meets the threshold, the smallest fully containing extract is used as
-            a fallback.
-            Defaults to ``False``.
-        single_result_iou_threshold (float): Minimal IoU value for selecting a single result when
-            ``force_single_result`` is ``True`` and ``allow_uncovered_geometry`` is ``True``.
-            Defaults to 0.99.
-        progressbar (bool, optional): Show progress bar. Defaults to True.
-
-    Raises:
-        GeometryNotCoveredError: If the geometry can't be covered by available extracts.
-
-    Returns:
-        OsmfinderDownloadResult: Result containing downloaded paths and find result.
-
-    Examples:
-        >>> import osmfinder
-        >>> from shapely.geometry import box
-        >>> geom = box(7.40, 43.71, 7.44, 43.75)
-        >>> result = osmfinder.find_and_download_extracts_pbf_files(
-        ...     geom, source="Geofabrik", download_directory="/tmp/osmfinder-doctest"
-        ... )
-        >>> isinstance(result, osmfinder.OsmfinderDownloadResult)
-        True
-        >>> len(result.download_paths) >= 1
-        True
-        >>> result.download_paths[0].name
-        'geofabrik_europe_monaco.osm.pbf'
-    """
-    download_directory = Path(download_directory)
-    excluded_extracts_ids: set[str] = set()
-    all_unavailable: list[OpenStreetMapExtract] = []
-
-    while True:
-        matching_extracts = find_smallest_containing_extracts(
-            geometry,
-            source,
-            geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-            allow_uncovered_geometry=allow_uncovered_geometry,
-            excluded_extracts_ids=excluded_extracts_ids,
-            force_single_result=force_single_result,
-            single_result_iou_threshold=single_result_iou_threshold,
-        )
-
-        downloaded, unavailable = _download_extracts_pbf_files(
-            matching_extracts.extracts,
-            download_directory,
-            progressbar=progressbar,
-            ignore_unavailable=True,
-        )
-        all_unavailable.extend(unavailable)
-
-        if not unavailable:
-            return OsmfinderDownloadResult(
-                find_result=matching_extracts,
-                download_paths=[path for _, path in downloaded],
-                unavailable_extracts=all_unavailable,
-            )
-
-        unavailable_file_names = ", ".join(extract.file_name for extract in unavailable)
-        warnings.warn(
-            (
-                "Some matching extracts are unavailable and will be excluded from the search"
-                f" ({unavailable_file_names}). Recalculating the coverage without them."
-            ),
-            OsmExtractUnavailableWarning,
-            stacklevel=0,
-        )
-        excluded_extracts_ids.update(extract.id for extract in unavailable)
-
-
 def display_available_extracts(
     source: OsmExtractSource | str,
     use_full_names: bool = True,
@@ -669,19 +617,16 @@ def display_available_extracts(
     Output will be printed to the console.
 
     Args:
-        source (Union[OsmExtractSource, str]): Source for which extracts should be displayed.
-        use_full_names (bool, optional): Whether to display full name, or short name of the extract.
+        source (OsmExtractSource | str): Source for which extracts should be displayed.
+        use_full_names (bool): Whether to display full name, or short name of the extract.
             Full name contains all parents of the extract. Defaults to `True`.
-        use_pager (bool, optional): Whether to display long output using Rich pager
+        use_pager (bool): Whether to display long output using Rich pager
             or just print to output. Defaults to `False`.
 
     Raises:
         ValueError: If provided source value cannot be parsed to OsmExtractSource.
 
-    Examples:
-        >>> import osmfinder
-        >>> # Prints a Rich tree to the console; no return value to assert.
-        >>> osmfinder.display_available_extracts("Geofabrik")  # doctest: +SKIP
+    Output is printed to the console.
     """
     try:
         source_enum = OsmExtractSource(source)
@@ -711,9 +656,9 @@ def get_available_extracts(
     Args:
         source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
             'BBBike', 'osmfr', 'GEO2Day', 'Movisda-admin', 'Movisda-grid', or an iterable /
-            comma-separated string of those (e.g. ['BBBike', 'OSMfr'] or 'bbbike,osmfr').
+            comma-separated string of those (e.g. ['BBBike', 'osmfr'] or 'bbbike,osmfr').
             Defaults to 'any'.
-        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the
+        excluded_extracts_ids (set[str] | None): Set of extract ids to exclude from the
             result. Useful for skipping extracts that are unavailable. Defaults to `None`.
 
     Returns:
@@ -721,18 +666,16 @@ def get_available_extracts(
 
     Examples:
         >>> import osmfinder
-        >>> # Get all extracts from a single source
-        >>> extracts = osmfinder.get_available_extracts("Geofabrik")
-        >>> isinstance(extracts, list)
-        True
-        >>> len(extracts) >= 1
-        True
         >>> # Get all extracts across all sources
         >>> all_extracts = osmfinder.get_available_extracts()
-        >>> isinstance(all_extracts, list)
-        True
         >>> len(all_extracts) >= 1
         True
+        >>> # Get all extracts from a single source
+        >>> extracts = osmfinder.get_available_extracts("Geofabrik")
+        >>> len(extracts) >= 1
+        True
+        >>> [e.id for e in extracts[:3]]
+        ['Geofabrik_antarctica', 'Geofabrik_melilla', 'Geofabrik_ceuta']
     """
     try:
         index = _get_index_for_sources(source)
@@ -745,7 +688,7 @@ def get_available_extracts(
     return list(index)
 
 
-def find_smallest_containing_extracts(
+def find_extracts_by_geometry(
     geometry: BaseGeometry,
     source: OsmExtractSourceLike = "any",
     geometry_coverage_iou_threshold: float = 0.01,
@@ -766,8 +709,8 @@ def find_smallest_containing_extracts(
     Args:
         geometry (BaseGeometry): Geometry to be covered.
         source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
-            'BBBike', 'OSMfr', or an iterable / comma-separated string of those
-            (e.g. ['BBBike', 'OSM_fr'] or 'bbbike,osmfr'). Defaults to 'any'.
+            'BBBike', 'osmfr', or an iterable / comma-separated string of those
+            (e.g. ['BBBike', 'osmfr'] or 'bbbike,osmfr'). Defaults to 'any'.
         geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union metric
             for selecting the matching OSM extracts. Is best matching extract has value lower than
             the threshold, it is discarded (except the first one). Has to be in range between
@@ -775,7 +718,7 @@ def find_smallest_containing_extracts(
             extracts that match the geometry exactly. Defaults to 0.01.
         allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
             by any OSM extract. Defaults to `False`.
-        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
+        excluded_extracts_ids (set[str] | None): Set of extract ids to exclude from the search.
             Useful for skipping extracts that are unavailable for download. Defaults to `None`.
         force_single_result (bool): When ``True``, return only the smallest extract that best covers
             the geometry. If ``allow_uncovered_geometry`` is ``False``, the smallest fully
@@ -789,13 +732,13 @@ def find_smallest_containing_extracts(
             Defaults to 0.99.
 
     Returns:
-        List[OpenStreetMapExtract]: List of extracts name, URL to download it and boundary polygon.
+        list[OpenStreetMapExtract]: List of extracts name, URL to download it and boundary polygon.
 
     Examples:
         >>> import osmfinder
         >>> from shapely.geometry import box
         >>> geom = box(7.40, 43.71, 7.44, 43.75)
-        >>> results = osmfinder.find_smallest_containing_extracts(geom, source="Geofabrik")
+        >>> results = osmfinder.find_extracts_by_geometry(geom, source="Geofabrik")
         >>> len(results.extracts) >= 1
         True
         >>> results.extracts[0].id
@@ -874,9 +817,9 @@ def find_extracts_covering_point(
             or a shapely ``Point`` geometry. The tuple follows the ``(x, y)`` convention
             used by GeoJSON and shapely, i.e. longitude first, latitude second.
         source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
-            'BBBike', 'OSMfr', or an iterable / comma-separated string of those
-            (e.g. ['BBBike', 'OSM_fr'] or 'bbbike,osmfr'). Defaults to 'any'.
-        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
+            'BBBike', 'osmfr', or an iterable / comma-separated string of those
+            (e.g. ['BBBike', 'osmfr'] or 'bbbike,osmfr'). Defaults to 'any'.
+        excluded_extracts_ids (set[str] | None): Set of extract ids to exclude from the search.
             Useful for skipping extracts that are unavailable for download. Defaults to `None`.
 
     Returns:
@@ -950,11 +893,11 @@ def _find_smallest_containing_extracts(
     Args:
         geometry (BaseGeometry): Geometry to be covered.
         polygons_index (OsmExtractsIndex): Index of available extracts.
-        num_of_multiprocessing_workers (int, optional): Number of workers used for multiprocessing.
+        num_of_multiprocessing_workers (int): Number of workers used for multiprocessing.
             Defaults to -1 which results in a total number of available cpu threads.
             `0` and `1` values disable multiprocessing.
             Similar to `n_jobs` parameter from `scikit-learn` library.
-        multiprocessing_activation_threshold (int, optional): Number of gometries required to start
+        multiprocessing_activation_threshold (int): Number of geometries required to start
             processing on multiple processes. Activating multiprocessing for a small
             amount of points might not be feasible. Defaults to 100.
         geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union metric
@@ -964,7 +907,7 @@ def _find_smallest_containing_extracts(
             extracts that match the geometry exactly. Defaults to 0.01.
         allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
             by any OSM extract. Defaults to `False`.
-        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
+        excluded_extracts_ids (set[str] | None): Set of extract ids to exclude from the search.
             Useful for skipping extracts that are unavailable for download. Defaults to `None`.
         force_single_result (bool): When ``True``, return only the smallest extract that best covers
             the geometry. If ``allow_uncovered_geometry`` is ``False``, the smallest fully
@@ -978,7 +921,7 @@ def _find_smallest_containing_extracts(
             Defaults to 0.99.
 
     Returns:
-        List[OpenStreetMapExtract]: List of extracts covering a given geometry.
+        list[OpenStreetMapExtract]: List of extracts covering a given geometry.
     """
     if excluded_extracts_ids:
         polygons_index = polygons_index.filter_by_mask(
@@ -1387,14 +1330,14 @@ def _filter_extracts(
         polygons_index (OsmExtractsIndex): Index of available extracts.
         num_of_multiprocessing_workers (int): Number of workers used for multiprocessing.
             Similar to `n_jobs` parameter from `scikit-learn` library.
-        multiprocessing_activation_threshold (int): Number of gometries required to start
+        multiprocessing_activation_threshold (int): Number of geometries required to start
             processing on multiple processes.
 
     Raises:
         RuntimeError: If provided extracts index is empty.
 
     Returns:
-        List[OpenStreetMapExtract]: Filtered list of extracts.
+        list[OpenStreetMapExtract]: Filtered list of extracts.
     """
     if polygons_index is None:
         raise RuntimeError("Extracts index is empty.")
@@ -1580,11 +1523,11 @@ def find(
     """
     Find an OSM extract by name or geometry.
 
-    Dispatches to :func:`get_extract_by_query` when called with a string query,
-    or to :func:`find_smallest_containing_extracts` when called with a geometry.
+    Dispatches to :func:`find_extract_by_query` when called with a string query,
+    or to :func:`find_extracts_by_geometry` when called with a geometry.
 
     Args:
-        query (Union[str, BaseGeometry]): Text query
+        query (str | BaseGeometry): Text query
             or shapely geometry to search for.
         source (OsmExtractSourceLike): OSM source name. Defaults to 'any'.
         select_first_match (bool): When multiple extracts match the query by name, select the
@@ -1595,7 +1538,7 @@ def find(
             Defaults to 0.01.
         allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
             by any OSM extract. Only used for geometry queries. Defaults to `False`.
-        excluded_extracts_ids (Optional[set[str]]): Set of extract ids to exclude from the search.
+        excluded_extracts_ids (set[str] | None): Set of extract ids to exclude from the search.
             Useful for skipping extracts that are unavailable for download. Defaults to `None`.
         force_single_result (bool): When ``True``, return only the smallest extract that best covers
             the geometry. If ``allow_uncovered_geometry`` is ``False``, the smallest fully
@@ -1609,7 +1552,7 @@ def find(
             Only used for geometry queries. Defaults to 0.99.
 
     Returns:
-        Union[OsmfinderQueryResult, OsmfinderGeometryResult]: Query result for string queries,
+        OsmfinderQueryResult | OsmfinderGeometryResult: Query result for string queries,
             geometry result for geometry queries. Both contain an ``extracts`` list.
 
     Examples:
@@ -1617,8 +1560,6 @@ def find(
         >>> from shapely.geometry import box
         >>> # Find by name
         >>> result = osmfinder.find("Monaco")
-        >>> isinstance(result, osmfinder.OsmfinderQueryResult)
-        True
         >>> len(result.extracts) == 1
         True
         >>> result.extracts[0].id
@@ -1626,21 +1567,19 @@ def find(
         >>> # Find by geometry
         >>> geom = box(7.40, 43.71, 7.44, 43.75)
         >>> result = osmfinder.find(geom, source="Geofabrik")
-        >>> isinstance(result, osmfinder.OsmfinderGeometryResult)
-        True
         >>> len(result.extracts) >= 1
         True
         >>> result.extracts[0].id
         'Geofabrik_monaco'
     """
     if isinstance(query, str):
-        return get_extract_by_query(
+        return find_extract_by_query(
             query,
             source=source,
             select_first_match=select_first_match,
             excluded_extracts_ids=excluded_extracts_ids,
         )
-    return find_smallest_containing_extracts(
+    return find_extracts_by_geometry(
         query,
         source=source,
         geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
@@ -1653,12 +1592,49 @@ def find(
 
 @overload
 def download(
+    query: OsmfinderResult,
+    source: OsmExtractSourceLike = "any",
+    *,
+    download_directory: str | Path = "files",
+    progressbar: bool = True,
+    force_refresh: bool = False,
+    retry_on_unavailable: bool = True,
+) -> OsmfinderDownloadResult: ...
+
+
+@overload
+def download(
+    query: OpenStreetMapExtract,
+    source: OsmExtractSourceLike = "any",
+    *,
+    download_directory: str | Path = "files",
+    progressbar: bool = True,
+    force_refresh: bool = False,
+    retry_on_unavailable: bool = True,
+) -> OsmfinderDownloadResult: ...
+
+
+@overload
+def download(
+    query: list[OpenStreetMapExtract],
+    source: OsmExtractSourceLike = "any",
+    *,
+    download_directory: str | Path = "files",
+    progressbar: bool = True,
+    force_refresh: bool = False,
+    retry_on_unavailable: bool = True,
+) -> OsmfinderDownloadResult: ...
+
+
+@overload
+def download(
     query: str,
     source: OsmExtractSourceLike = "any",
     *,
     download_directory: str | Path = "files",
     select_first_match: bool = True,
     progressbar: bool = True,
+    force_refresh: bool = False,
 ) -> OsmfinderDownloadResult: ...
 
 
@@ -1673,11 +1649,12 @@ def download(
     force_single_result: bool = False,
     single_result_iou_threshold: float = 0.99,
     progressbar: bool = True,
+    force_refresh: bool = False,
 ) -> OsmfinderDownloadResult: ...
 
 
 def download(
-    query: str | BaseGeometry,
+    query: str | BaseGeometry | OsmfinderResult | OpenStreetMapExtract | list[OpenStreetMapExtract],
     source: OsmExtractSourceLike = "any",
     *,
     download_directory: str | Path = "files",
@@ -1687,53 +1664,49 @@ def download(
     force_single_result: bool = False,
     single_result_iou_threshold: float = 0.99,
     progressbar: bool = True,
+    force_refresh: bool = False,
+    retry_on_unavailable: bool = True,
 ) -> OsmfinderDownloadResult:
     """
-    Download an OSM extract by name or geometry.
+    Download OSM extracts.
 
-    Dispatches to :func:`download_extract_by_query` when called with a string query,
-    or to :func:`find_and_download_extracts_pbf_files` when called with a geometry.
+    Accepts a string query, a geometry, a find result, a single extract, or a list of extracts.
 
     Args:
-        query (Union[str, BaseGeometry]): Text query
-            or shapely geometry to search for.
+        query: What to download. Accepts a string query, geometry, find result,
+            single extract, or list of extracts. A string query or geometry triggers
+            a find first; a result or extract list downloads directly.
         source (OsmExtractSourceLike): OSM source name. Defaults to 'any'.
-        download_directory (Union[str, Path]): Directory where the file should be
-            downloaded. Defaults to "files".
+        download_directory (str | Path): Directory where files should be downloaded.
+            Defaults to "files".
         select_first_match (bool): When multiple extracts match the query by name, select the
-            first one (sorted by area ascending, then id) with a warning instead of raising
-            an error. Only used for string queries. Defaults to `True`.
-        geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union
-            metric for selecting the matching OSM extracts. Only used for geometry queries.
-            Defaults to 0.01.
-        allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
-            by any OSM extract. Only used for geometry queries. Defaults to `False`.
-        force_single_result (bool): When ``True``, return only the smallest extract that best
-            covers the geometry. If ``allow_uncovered_geometry`` is ``False``, the smallest fully
-            containing extract is returned. If ``allow_uncovered_geometry`` is ``True``, the
-            extract with the highest IoU above ``single_result_iou_threshold`` is returned.
-            If no candidate meets the threshold, the smallest fully containing extract is used as
-            a fallback.
-            Only used for geometry queries. Defaults to ``False``.
-        single_result_iou_threshold (float): Minimal IoU value for selecting a single result when
+            first one with a warning. Only used for string queries. Defaults to `True`.
+        geometry_coverage_iou_threshold (float): Minimal IoU for selecting extracts.
+            Only used for geometry queries. Defaults to 0.01.
+        allow_uncovered_geometry (bool): Suppress error if geometry parts aren't covered.
+            Only used for geometry queries. Defaults to `False`.
+        force_single_result (bool): Return only the single best extract. Only used for geometry
+            queries. Defaults to ``False``.
+        single_result_iou_threshold (float): Minimal IoU for selecting a single result when
             ``force_single_result`` is ``True`` and ``allow_uncovered_geometry`` is ``True``.
             Only used for geometry queries. Defaults to 0.99.
         progressbar (bool): Show progress bar. Defaults to True.
+        force_refresh (bool): When ``True``, re-download even if the file already exists.
+            Defaults to False.
+        retry_on_unavailable (bool): When ``True`` and the query is an ``OsmfinderResult``,
+            unavailable extracts are excluded and the search is retried. When ``False``,
+            the result's extracts are downloaded as-is and unavailable extracts raise
+            an exception. Defaults to ``True``.
 
     Returns:
-        OsmfinderDownloadResult: Result containing ``download_paths`` and ``find_result``
-        (the underlying query or geometry result).
+        OsmfinderDownloadResult: Result containing downloaded paths and find result.
 
     Examples:
         >>> import osmfinder
         >>> from pathlib import Path
         >>> # Download by name
         >>> result = osmfinder.download("Monaco", download_directory="/tmp/osmfinder-doctest")
-        >>> isinstance(result, osmfinder.OsmfinderDownloadResult)
-        True
         >>> len(result.download_paths) == 1
-        True
-        >>> isinstance(result.download_paths[0], Path)
         True
         >>> result.download_paths[0].name
         'movisda-admin_monaco.osm.pbf'
@@ -1748,27 +1721,96 @@ def download(
         >>> result.download_paths[0].name
         'geofabrik_europe_monaco.osm.pbf'
     """
+    download_directory = Path(download_directory)
+    find_result: OsmfinderResult
+    extracts_to_download: list[OpenStreetMapExtract]
+    ignore_unavailable: bool
+
     if isinstance(query, str):
-        return download_extract_by_query(
+        return _download_with_retry_query(
             query,
-            source=source,
-            download_directory=download_directory,
-            progressbar=progressbar,
+            source,
+            download_directory,
             select_first_match=select_first_match,
+            progressbar=progressbar,
+            force_refresh=force_refresh,
         )
-    return find_and_download_extracts_pbf_files(
-        query,
-        source=source,
-        download_directory=download_directory,
-        geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-        allow_uncovered_geometry=allow_uncovered_geometry,
-        force_single_result=force_single_result,
-        single_result_iou_threshold=single_result_iou_threshold,
+    elif isinstance(query, BaseGeometry):
+        return _download_with_retry_geometry(
+            query,
+            source,
+            download_directory,
+            geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
+            allow_uncovered_geometry=allow_uncovered_geometry,
+            force_single_result=force_single_result,
+            single_result_iou_threshold=single_result_iou_threshold,
+            progressbar=progressbar,
+            force_refresh=force_refresh,
+        )
+    elif isinstance(query, OsmfinderResult):
+        if retry_on_unavailable:
+            if isinstance(query, OsmfinderQueryResult):
+                return download(
+                    query.query,
+                    source=source or query.sources_used,
+                    download_directory=download_directory,
+                    select_first_match=True,
+                    progressbar=progressbar,
+                    force_refresh=force_refresh,
+                )
+            elif isinstance(query, OsmfinderGeometryResult):
+                return download(
+                    query.input_geometry,
+                    source=source or query.sources_used,
+                    download_directory=download_directory,
+                    geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
+                    allow_uncovered_geometry=allow_uncovered_geometry,
+                    force_single_result=force_single_result,
+                    single_result_iou_threshold=single_result_iou_threshold,
+                    progressbar=progressbar,
+                    force_refresh=force_refresh,
+                )
+        find_result = query
+        extracts_to_download = query.extracts
+        ignore_unavailable = retry_on_unavailable
+    elif isinstance(query, OpenStreetMapExtract):
+        find_result = OsmfinderResult(
+            extracts=[query],
+            sources_used=[],
+        )
+        extracts_to_download = [query]
+        ignore_unavailable = True
+    elif isinstance(query, list) and query and isinstance(query[0], OpenStreetMapExtract):
+        find_result = OsmfinderResult(
+            extracts=query,
+            sources_used=[],
+        )
+        extracts_to_download = query
+        ignore_unavailable = True
+    else:
+        raise TypeError(
+            f"Unsupported query type: {type(query).__name__}. "
+            "Expected str, BaseGeometry, OsmfinderResult, OpenStreetMapExtract, "
+            "or list[OpenStreetMapExtract]."
+        )
+
+    if not extracts_to_download:
+        return OsmfinderDownloadResult(
+            find_result=find_result,
+            download_paths=[],
+            unavailable_extracts=[],
+        )
+
+    downloaded, unavailable = _download_extracts_pbf_files(
+        extracts_to_download,
+        download_directory,
+        progressbar=progressbar,
+        ignore_unavailable=ignore_unavailable,
+        force_refresh=force_refresh,
     )
-    return find_and_download_extracts_pbf_files(
-        query,
-        source=source,
-        download_directory=download_directory,
-        geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-        allow_uncovered_geometry=allow_uncovered_geometry,
+
+    return OsmfinderDownloadResult(
+        find_result=find_result,
+        download_paths=[path for _, path in downloaded],
+        unavailable_extracts=unavailable,
     )
