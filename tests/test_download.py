@@ -221,3 +221,87 @@ def test_download_extract_by_query_unavailable_list(mocker: MockerFixture) -> No
 
     assert len(result.unavailable_extracts) == 1
     assert result.unavailable_extracts[0].id == "osmfr_vc"
+
+
+def test_download_query_result_no_retry_raises(mocker: MockerFixture) -> None:
+    """Test retry_on_unavailable=False on OsmfinderQueryResult raises on failure."""
+    from requests.exceptions import HTTPError
+
+    index = _two_vatican_city_index()
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    def fake_download(
+        extract: OpenStreetMapExtract,
+        download_directory: Path,
+        progressbar: bool = True,
+        force_refresh: bool = False,
+    ) -> Path:
+        if extract.id == "osmfr_vc":
+            raise HTTPError("Extract unavailable")
+        return Path(download_directory) / f"{extract.file_name}.osm.pbf"
+
+    mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        with pytest.warns(OsmExtractMultipleMatchesWarning):
+            result = find_extract_by_query("Vatican City")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        with pytest.raises(HTTPError):
+            result.download(download_directory=tmp_dir, retry_on_unavailable=False)
+
+
+def test_download_geometry_result_no_retry_raises(mocker: MockerFixture) -> None:
+    """Test retry_on_unavailable=False on OsmfinderGeometryResult raises on failure."""
+    from requests.exceptions import HTTPError
+    from rq_geo_toolkit.geocode import geocode_to_geometry
+
+    geometry = geocode_to_geometry("Andorra")
+    matching_extracts = find_extracts_by_geometry(geometry, "geofabrik")
+    failing_extract_id = matching_extracts.extracts[0].id
+
+    def fake_download(
+        extract: OpenStreetMapExtract,
+        download_directory: Path,
+        progressbar: bool = True,
+        force_refresh: bool = False,
+    ) -> Path:
+        if extract.id == failing_extract_id:
+            raise HTTPError("Extract unavailable")
+        return Path(download_directory) / f"{extract.file_name}.osm.pbf"
+
+    mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        with pytest.raises(HTTPError):
+            matching_extracts.download(download_directory=tmp_dir, retry_on_unavailable=False)
+
+
+def test_download_query_result_retry_on_unavailable_true(mocker: MockerFixture) -> None:
+    """Test retry_on_unavailable=True (default) still retries with query results."""
+    from requests.exceptions import ConnectionError as RequestsConnectionError
+
+    index = _two_vatican_city_index()
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    def fake_download(
+        extract: OpenStreetMapExtract,
+        download_directory: Path,
+        progressbar: bool = True,
+        force_refresh: bool = False,
+    ) -> Path:
+        if extract.id == "osmfr_vc":
+            raise RequestsConnectionError("offline")
+        return Path(download_directory) / f"{extract.file_name}.osm.pbf"
+
+    mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        with pytest.warns(OsmExtractMultipleMatchesWarning):
+            with pytest.warns(OsmExtractUnavailableWarning):
+                result = osmfinder.download(
+                    "Vatican City", download_directory=tmp_dir, retry_on_unavailable=True
+                )
+
+    assert len(result.download_paths) == 1
+    assert result.download_paths[0].name == "geo2day_vatican_city.osm.pbf"

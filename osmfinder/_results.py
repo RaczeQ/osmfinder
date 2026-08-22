@@ -60,6 +60,7 @@ class OsmfinderResult:
         download_directory: str | Path = "files",
         progressbar: bool = True,
         force_refresh: bool = False,
+        retry_on_unavailable: bool = True,
     ) -> OsmfinderDownloadResult:
         """
         Download all extracts in this result as PBF files.
@@ -70,6 +71,10 @@ class OsmfinderResult:
             progressbar (bool, optional): Show progress bar. Defaults to True.
             force_refresh (bool, optional): When ``True``, re-download even if the file already
                 exists. Defaults to False.
+            retry_on_unavailable (bool, optional): When ``True`` and this is a query or geometry
+                result, unavailable extracts are excluded and the search is retried. When
+                ``False``, the result's extracts are downloaded as-is and unavailable extracts
+                raise an exception. Defaults to ``True``.
 
         Returns:
             OsmfinderDownloadResult: Result containing downloaded paths and find result.
@@ -81,6 +86,7 @@ class OsmfinderResult:
             download_directory=download_directory,
             progressbar=progressbar,
             force_refresh=force_refresh,
+            retry_on_unavailable=retry_on_unavailable,
         )
 
 

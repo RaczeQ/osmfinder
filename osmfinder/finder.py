@@ -215,16 +215,6 @@ def _download_extracts_pbf_files(
     unavailable: list[OpenStreetMapExtract] = []
 
     for extract in extracts:
-        if not ignore_unavailable:
-            downloaded.append(
-                (
-                    extract,
-                    _download_single_extract(
-                        extract, download_directory, progressbar, force_refresh=force_refresh
-                    ),
-                )
-            )
-            continue
         try:
             downloaded.append(
                 (
@@ -235,6 +225,8 @@ def _download_extracts_pbf_files(
                 )
             )
         except RequestException:
+            if not ignore_unavailable:
+                raise
             unavailable.append(extract)
 
     return downloaded, unavailable
@@ -1916,6 +1908,7 @@ def download(
     download_directory: str | Path = "files",
     progressbar: bool = True,
     force_refresh: bool = False,
+    retry_on_unavailable: bool = True,
 ) -> OsmfinderDownloadResult: ...
 
 
@@ -1927,6 +1920,7 @@ def download(
     download_directory: str | Path = "files",
     progressbar: bool = True,
     force_refresh: bool = False,
+    retry_on_unavailable: bool = True,
 ) -> OsmfinderDownloadResult: ...
 
 
@@ -1938,6 +1932,7 @@ def download(
     download_directory: str | Path = "files",
     progressbar: bool = True,
     force_refresh: bool = False,
+    retry_on_unavailable: bool = True,
 ) -> OsmfinderDownloadResult: ...
 
 
@@ -1980,6 +1975,7 @@ def download(
     single_result_iou_threshold: float = 0.99,
     progressbar: bool = True,
     force_refresh: bool = False,
+    retry_on_unavailable: bool = True,
 ) -> OsmfinderDownloadResult:
     """
     Download OSM extracts.
@@ -2007,6 +2003,10 @@ def download(
         progressbar (bool): Show progress bar. Defaults to True.
         force_refresh (bool): When ``True``, re-download even if the file already exists.
             Defaults to False.
+        retry_on_unavailable (bool): When ``True`` and the query is an ``OsmfinderResult``,
+            unavailable extracts are excluded and the search is retried. When ``False``,
+            the result's extracts are downloaded as-is and unavailable extracts raise
+            an exception. Defaults to ``True``.
 
     Returns:
         OsmfinderDownloadResult: Result containing downloaded paths and find result.
@@ -2038,6 +2038,7 @@ def download(
     download_directory = Path(download_directory)
     find_result: OsmfinderResult
     extracts_to_download: list[OpenStreetMapExtract]
+    ignore_unavailable: bool
 
     if isinstance(query, str):
         return _download_with_retry_query(
@@ -2061,42 +2062,45 @@ def download(
             force_refresh=force_refresh,
         )
     elif isinstance(query, OsmfinderResult):
-        if isinstance(query, OsmfinderQueryResult):
-            return download(
-                query.query,
-                source=source or query.sources_used,
-                download_directory=download_directory,
-                select_first_match=True,
-                progressbar=progressbar,
-                force_refresh=force_refresh,
-            )
-        elif isinstance(query, OsmfinderGeometryResult):
-            return download(
-                query.input_geometry,
-                source=source or query.sources_used,
-                download_directory=download_directory,
-                geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-                allow_uncovered_geometry=allow_uncovered_geometry,
-                force_single_result=force_single_result,
-                single_result_iou_threshold=single_result_iou_threshold,
-                progressbar=progressbar,
-                force_refresh=force_refresh,
-            )
-        else:
-            find_result = query
-            extracts_to_download = query.extracts
+        if retry_on_unavailable:
+            if isinstance(query, OsmfinderQueryResult):
+                return download(
+                    query.query,
+                    source=source or query.sources_used,
+                    download_directory=download_directory,
+                    select_first_match=True,
+                    progressbar=progressbar,
+                    force_refresh=force_refresh,
+                )
+            elif isinstance(query, OsmfinderGeometryResult):
+                return download(
+                    query.input_geometry,
+                    source=source or query.sources_used,
+                    download_directory=download_directory,
+                    geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
+                    allow_uncovered_geometry=allow_uncovered_geometry,
+                    force_single_result=force_single_result,
+                    single_result_iou_threshold=single_result_iou_threshold,
+                    progressbar=progressbar,
+                    force_refresh=force_refresh,
+                )
+        find_result = query
+        extracts_to_download = query.extracts
+        ignore_unavailable = retry_on_unavailable
     elif isinstance(query, OpenStreetMapExtract):
         find_result = OsmfinderResult(
             extracts=[query],
             sources_used=[],
         )
         extracts_to_download = [query]
+        ignore_unavailable = True
     elif isinstance(query, list) and query and isinstance(query[0], OpenStreetMapExtract):
         find_result = OsmfinderResult(
             extracts=query,
             sources_used=[],
         )
         extracts_to_download = query
+        ignore_unavailable = True
     else:
         raise TypeError(
             f"Unsupported query type: {type(query).__name__}. "
@@ -2115,7 +2119,7 @@ def download(
         extracts_to_download,
         download_directory,
         progressbar=progressbar,
-        ignore_unavailable=True,
+        ignore_unavailable=ignore_unavailable,
         force_refresh=force_refresh,
     )
 
