@@ -774,6 +774,21 @@ def find_extracts_by_geometry(
             step.selected = False
             step.reason = "redundant"
 
+    cumulative_union = Polygon()
+    input_area = _calculate_geodetic_area(geometry)
+    last_coverage = 0.0
+    for step in steps:
+        if step.selected:
+            cumulative_union = unary_union([cumulative_union, step.extract.geometry])
+            covered_area = _calculate_geodetic_area(cumulative_union.intersection(geometry))
+            if input_area > 0:
+                last_coverage = min(1.0, covered_area / input_area)
+            else:
+                last_coverage = 1.0 if covered_area == 0 else 0.0
+            step.cumulative_coverage = last_coverage
+        else:
+            step.cumulative_coverage = last_coverage
+
     covered_geometry = (
         unary_union([e.geometry for e in extracts]).intersection(geometry)
         if extracts

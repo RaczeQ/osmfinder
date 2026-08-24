@@ -1059,3 +1059,95 @@ def test_find_extracts_covering_point_invalid_source_raises(mocker: MockerFixtur
 
     with pytest.raises(ValueError, match="Unknown OSM extracts source"):
         find_extracts_covering_point((0.0, 0.0), source="nonexistent")
+
+
+def test_cumulative_coverage_increases_with_selected_steps(mocker: MockerFixture) -> None:
+    """Cumulative coverage should increase for each selected extract."""
+    index = _index_from_extracts(
+        [
+            {
+                "id": "a",
+                "name": "Left",
+                "parent": "root",
+                "geometry": box(0, 0, 1, 2),
+            },
+            {
+                "id": "b",
+                "name": "Right",
+                "parent": "root",
+                "geometry": box(1, 0, 2, 2),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(box(0, 0, 2, 2), "any")
+    selected_steps = [s for s in result.steps if s.selected]
+    assert len(selected_steps) == 2
+
+    coverages = [s.cumulative_coverage for s in selected_steps]
+    assert coverages[0] > 0
+    assert coverages[1] >= coverages[0]
+    assert abs(coverages[-1] - result.coverage) < 1e-4
+
+
+def test_cumulative_coverage_multipart_against_total_input(mocker: MockerFixture) -> None:
+    """Cumulative coverage is computed against the total multipart input."""
+    from shapely.geometry import MultiPolygon
+
+    poly_a = box(0, 0, 1, 1)
+    poly_b = box(2, 0, 3, 1)
+    multipart = MultiPolygon([poly_a, poly_b])
+
+    index = _index_from_extracts(
+        [
+            {
+                "id": "a",
+                "name": "Part A",
+                "parent": "root",
+                "geometry": poly_a,
+            },
+            {
+                "id": "b",
+                "name": "Part B",
+                "parent": "root",
+                "geometry": poly_b,
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(multipart, "any")
+    selected_steps = [s for s in result.steps if s.selected]
+    assert len(selected_steps) == 2
+    assert abs(selected_steps[-1].cumulative_coverage - 1.0) < 1e-6
+
+
+def test_cumulative_coverage_redundant_step_carries_forward(mocker: MockerFixture) -> None:
+    """Redundant steps carry forward the last cumulative coverage value."""
+    index = _index_from_extracts(
+        [
+            {
+                "id": "a",
+                "name": "Big",
+                "parent": "root",
+                "geometry": box(0, 0, 2, 2),
+            },
+            {
+                "id": "b",
+                "name": "Small",
+                "parent": "root",
+                "geometry": box(0, 0, 1, 1),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(box(0, 0, 1, 1), "any")
+    redundant_steps = [s for s in result.steps if s.reason == "redundant"]
+    if redundant_steps:
+        last_selected_coverage = next(
+            (s.cumulative_coverage for s in reversed(result.steps) if s.selected), 0.0
+        )
+        for step in redundant_steps:
+            assert step.cumulative_coverage == last_selected_coverage

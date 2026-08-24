@@ -249,6 +249,7 @@ class GeometryCoveringStep:
     reason: str
     geometry_to_cover: BaseGeometry
     intersection_geometry: BaseGeometry
+    cumulative_coverage: float = 0.0
 
     def __repr__(self) -> str:
         return f"GeometryCoveringStep({self.extract.id}, {self.extract.name})"

@@ -198,6 +198,7 @@ def _print_geometry_result(result: OsmfinderGeometryResult) -> None:
     table.add_column("Name", style="green")
     table.add_column("Area (km\u00b2)", justify="right", style="yellow")
     table.add_column("IoU", justify="right")
+    table.add_column("Cum. Coverage", justify="right", style="cyan")
     table.add_column("Status", style="bold")
     table.add_column("Reason", style="dim")
 
@@ -205,8 +206,8 @@ def _print_geometry_result(result: OsmfinderGeometryResult) -> None:
 
     row_idx = 1
     for step in result.steps:
-        if not step.selected:
-            continue
+        # if not step.selected:
+        #     continue
         area = _calculate_geodetic_area(step.extract.geometry)
         table.add_row(
             str(row_idx),
@@ -214,7 +215,10 @@ def _print_geometry_result(result: OsmfinderGeometryResult) -> None:
             step.extract.name,
             f"{area:.2f}",
             f"{step.iou:.4f}",
-            "[bold green]selected[/bold green]",
+            f"{step.cumulative_coverage * 100:.1f}%",
+            "[bold green]selected[/bold green]"
+            if step.selected
+            else "[bold red]rejected[/bold red]",
             step.reason,
         )
         row_idx += 1

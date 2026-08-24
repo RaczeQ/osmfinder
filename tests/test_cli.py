@@ -304,12 +304,14 @@ def test_covers_results_follow_steps_order(monkeypatch: pytest.MonkeyPatch) -> N
     mock_step1.extract = mock_extract1
     mock_step1.iou = 0.5
     mock_step1.reason = "first_extract"
+    mock_step1.cumulative_coverage = 0.8
 
     mock_step2 = MagicMock()
     mock_step2.selected = True
     mock_step2.extract = mock_extract2
     mock_step2.iou = 0.3
     mock_step2.reason = "selected"
+    mock_step2.cumulative_coverage = 1.0
 
     mock_result = MagicMock()
     mock_result.extracts = [mock_extract2, mock_extract1]
@@ -464,3 +466,35 @@ def test_clear_with_invalid_source() -> None:
     result = runner.invoke(app, ["clear", "--source", "invalid-source"])
     assert result.exit_code == 1
     assert "Unknown OSM extracts source" in result.output
+
+
+def test_covers_displays_cumulative_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test covers command displays cumulative coverage in the table."""
+    from shapely.geometry import box
+
+    mock_extract1 = MagicMock()
+    mock_extract1.id = "extract_a"
+    mock_extract1.name = "A"
+    mock_extract1.file_name = "a"
+    mock_extract1.geometry = box(0, 0, 1, 1)
+
+    mock_step1 = MagicMock()
+    mock_step1.selected = True
+    mock_step1.extract = mock_extract1
+    mock_step1.iou = 0.5
+    mock_step1.reason = "first_extract"
+    mock_step1.cumulative_coverage = 0.8
+
+    mock_result = MagicMock()
+    mock_result.extracts = [mock_extract1]
+    mock_result.steps = [mock_step1]
+    mock_result.input_geometry = box(0, 0, 1, 1)
+    mock_result.covered_geometry = box(0, 0, 1, 1)
+    mock_result.iou_threshold = 0.01
+    mock_result.sources_used = []
+    mock_find = MagicMock(return_value=mock_result)
+    monkeypatch.setattr("osmfinder.cli.find_extracts_by_geometry", mock_find)
+
+    result = runner.invoke(app, ["covers", "--bbox", "0,0,1,1", "--dry-run"])
+    assert result.exit_code == 0
+    assert "80.0%" in result.output
