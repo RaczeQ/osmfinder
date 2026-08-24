@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -40,12 +40,13 @@ def _format_id_list(extracts: list[OpenStreetMapExtract], max_items: int = 5) ->
     return ", ".join(parts)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class OsmfinderResult:
     """Base class for all osmfinder results."""
 
     extracts: list[OpenStreetMapExtract]
     sources_used: list[OsmExtractSource]
+    config: dict[str, Any] = field(default_factory=dict)
 
     def __repr__(self) -> str:
         sources = _format_sources(self.sources_used)
@@ -139,7 +140,10 @@ class OsmfinderGeometryResult(OsmfinderResult):
     covered_geometry: BaseGeometry
     uncovered_geometry: BaseGeometry
     steps: list[GeometryCoveringStep]
-    iou_threshold: float
+
+    @property
+    def iou_threshold(self) -> float:
+        return float(self.config["geometry_coverage_iou_threshold"])
 
     @property
     def coverage(self) -> float:

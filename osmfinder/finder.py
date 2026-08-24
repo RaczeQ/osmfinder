@@ -618,6 +618,12 @@ def find_extract_by_query(
                 extracts=[matching_index_row],
                 matched_extracts=matched_extracts,
                 sources_used=sources_used,
+                config={
+                    "select_first_match": select_first_match,
+                    "excluded_extracts_ids": (
+                        list(excluded_extracts_ids) if excluded_extracts_ids else []
+                    ),
+                },
             )
 
     except ValueError as ex:
@@ -814,7 +820,13 @@ def find_extracts_by_geometry(
         covered_geometry=covered_geometry,
         uncovered_geometry=uncovered_geometry,
         steps=steps,
-        iou_threshold=geometry_coverage_iou_threshold,
+        config={
+            "geometry_coverage_iou_threshold": geometry_coverage_iou_threshold,
+            "allow_uncovered_geometry": allow_uncovered_geometry,
+            "force_single_result": force_single_result,
+            "single_result_iou_threshold": single_result_iou_threshold,
+            "excluded_extracts_ids": list(excluded_extracts_ids) if excluded_extracts_ids else [],
+        },
     )
 
 
@@ -1665,7 +1677,7 @@ def download(
     source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
-    select_first_match: bool = True,
+    select_first_match: bool | None = None,
     progressbar: bool = True,
     force_refresh: bool = False,
 ) -> OsmfinderDownloadResult: ...
@@ -1677,10 +1689,10 @@ def download(
     source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
-    geometry_coverage_iou_threshold: float = 0.01,
-    allow_uncovered_geometry: bool = False,
-    force_single_result: bool = False,
-    single_result_iou_threshold: float = 0.99,
+    geometry_coverage_iou_threshold: float | None = None,
+    allow_uncovered_geometry: bool | None = None,
+    force_single_result: bool | None = None,
+    single_result_iou_threshold: float | None = None,
     progressbar: bool = True,
     force_refresh: bool = False,
 ) -> OsmfinderDownloadResult: ...
@@ -1691,11 +1703,11 @@ def download(
     source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
-    select_first_match: bool = True,
-    geometry_coverage_iou_threshold: float = 0.01,
-    allow_uncovered_geometry: bool = False,
-    force_single_result: bool = False,
-    single_result_iou_threshold: float = 0.99,
+    select_first_match: bool | None = None,
+    geometry_coverage_iou_threshold: float | None = None,
+    allow_uncovered_geometry: bool | None = None,
+    force_single_result: bool | None = None,
+    single_result_iou_threshold: float | None = None,
     progressbar: bool = True,
     force_refresh: bool = False,
     retry_on_unavailable: bool = True,
@@ -1710,24 +1722,40 @@ def download(
 
     Accepts a string query, a geometry, a find result, a single extract, or a list of extracts.
 
+    When ``query`` is an ``OsmfinderResult``, parameters that are not explicitly
+    provided, default to the values stored in ``query.config`` from the original
+    find operation. Explicit arguments always override those stored defaults.
+
     Args:
         query: What to download. Accepts a string query, geometry, find result,
             single extract, or list of extracts. A string query or geometry triggers
             a find first; a result or extract list downloads directly.
         source (OsmExtractSourceLike | None): OSM source name. Defaults to `None`.
+            When ``query`` is an ``OsmfinderResult`` and ``source`` is not provided,
+            the result's ``sources_used`` are used.
         download_directory (str | Path): Directory where files should be downloaded.
             Defaults to "files".
-        select_first_match (bool): When multiple extracts match the query by name, select the
-            first one with a warning. Only used for string queries. Defaults to `True`.
-        geometry_coverage_iou_threshold (float): Minimal IoU for selecting extracts.
-            Only used for geometry queries. Defaults to 0.01.
-        allow_uncovered_geometry (bool): Suppress error if geometry parts aren't covered.
-            Only used for geometry queries. Defaults to `False`.
-        force_single_result (bool): Return only the single best extract. Only used for geometry
-            queries. Defaults to ``False``.
-        single_result_iou_threshold (float): Minimal IoU for selecting a single result when
-            ``force_single_result`` is ``True`` and ``allow_uncovered_geometry`` is ``True``.
-            Only used for geometry queries. Defaults to 0.99.
+        select_first_match (bool | None): When multiple extracts match the query by name,
+            select the first one with a warning. Only used for string queries. Defaults
+            to ``None``, in which case the value from ``query.config`` is used when
+            ``query`` is an ``OsmfinderResult``, otherwise ``True``.
+        geometry_coverage_iou_threshold (float | None): Minimal IoU for selecting extracts.
+            Only used for geometry queries. Defaults to ``None``, in which case the value
+            from ``query.config`` is used when ``query`` is an ``OsmfinderGeometryResult``,
+            otherwise ``0.01``.
+        allow_uncovered_geometry (bool | None): Suppress error if geometry parts aren't covered.
+            Only used for geometry queries. Defaults to ``None``, in which case the value
+            from ``query.config`` is used when ``query`` is an ``OsmfinderGeometryResult``,
+            otherwise ``False``.
+        force_single_result (bool | None): Return only the single best extract. Only used for
+            geometry queries. Defaults to ``None``, in which case the value from
+            ``query.config`` is used when ``query`` is an ``OsmfinderGeometryResult``,
+            otherwise ``False``.
+        single_result_iou_threshold (float | None): Minimal IoU for selecting a single result
+            when ``force_single_result`` is ``True`` and ``allow_uncovered_geometry`` is
+            ``True``. Only used for geometry queries. Defaults to ``None``, in which case
+            the value from ``query.config`` is used when ``query`` is an
+            ``OsmfinderGeometryResult``, otherwise ``0.99``.
         progressbar (bool): Show progress bar. Defaults to True.
         force_refresh (bool): When ``True``, re-download even if the file already exists.
             Defaults to False.
@@ -1766,26 +1794,90 @@ def download(
     extracts_to_download: list[OpenStreetMapExtract]
     ignore_unavailable: bool
 
+    if isinstance(query, OsmfinderResult):
+        result_config = query.config
+    else:
+        result_config = {}
+
+    if source is None and isinstance(query, OsmfinderResult):
+        source = query.sources_used
+
+    if select_first_match is None:
+        select_first_match = result_config.get("select_first_match", True)
+
+    if geometry_coverage_iou_threshold is None:
+        geometry_coverage_iou_threshold = result_config.get("geometry_coverage_iou_threshold", 0.01)
+
+    if allow_uncovered_geometry is None:
+        allow_uncovered_geometry = result_config.get("allow_uncovered_geometry", False)
+
+    if force_single_result is None:
+        force_single_result = result_config.get("force_single_result", False)
+
+    if single_result_iou_threshold is None:
+        single_result_iou_threshold = result_config.get("single_result_iou_threshold", 0.99)
+
     if isinstance(query, str):
-        return _download_with_retry_query(
+        if retry_on_unavailable:
+            return _download_with_retry_query(
+                query,
+                source,
+                download_directory,
+                select_first_match=select_first_match,
+                progressbar=progressbar,
+                force_refresh=force_refresh,
+            )
+        find_result = find_extract_by_query(
             query,
-            source,
-            download_directory,
+            source=source,
             select_first_match=select_first_match,
+        )
+        extracts = find_result.extracts
+        downloaded, unavailable = _download_extracts_pbf_files(
+            extracts,
+            download_directory,
             progressbar=progressbar,
+            ignore_unavailable=False,
             force_refresh=force_refresh,
         )
+        return OsmfinderDownloadResult(
+            find_result=find_result,
+            download_paths=[path for _, path in downloaded],
+            unavailable_extracts=unavailable,
+        )
     elif isinstance(query, BaseGeometry):
-        return _download_with_retry_geometry(
+        if retry_on_unavailable:
+            return _download_with_retry_geometry(
+                query,
+                source,
+                download_directory,
+                geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
+                allow_uncovered_geometry=allow_uncovered_geometry,
+                force_single_result=force_single_result,
+                single_result_iou_threshold=single_result_iou_threshold,
+                progressbar=progressbar,
+                force_refresh=force_refresh,
+            )
+        find_result = find_extracts_by_geometry(
             query,
-            source,
-            download_directory,
+            source=source,
             geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
             allow_uncovered_geometry=allow_uncovered_geometry,
             force_single_result=force_single_result,
             single_result_iou_threshold=single_result_iou_threshold,
+        )
+        extracts = find_result.extracts
+        downloaded, unavailable = _download_extracts_pbf_files(
+            extracts,
+            download_directory,
             progressbar=progressbar,
+            ignore_unavailable=False,
             force_refresh=force_refresh,
+        )
+        return OsmfinderDownloadResult(
+            find_result=find_result,
+            download_paths=[path for _, path in downloaded],
+            unavailable_extracts=unavailable,
         )
     elif isinstance(query, OsmfinderResult):
         if retry_on_unavailable:
