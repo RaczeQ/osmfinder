@@ -225,9 +225,10 @@ Record of a single extract considered during geometry covering.
 | `extract` | `OpenStreetMapExtract` | The extract considered |
 | `iou` | `float` | Intersection over Union with the remaining geometry |
 | `selected` | `bool` | Whether the extract was selected |
-| `reason` | `str` | Selection reason (`"selected"` or `"low_iou"`) |
+| `reason` | `str` | Selection reason (`"first_extract"`, `"selected"`, `"low_iou"` or `"redundant"`) |
 | `geometry_to_cover` | `BaseGeometry` | Remaining geometry before this step |
 | `intersection_geometry` | `BaseGeometry` | Intersection of the extract with the remaining geometry |
+| `cumulative_coverage` | `float` | Cumulative coverage of the input geometry up to this step |
 
 ### Example `repr` output
 
@@ -274,12 +275,12 @@ OsmfinderDownloadResult
 
 | Function | Search by | Returns |
 |---|---|---|
+| `find` | name / id / geometry | `OsmfinderQueryResult \| OsmfinderGeometryResult` |
+| `download` | name / id / geometry / `OsmfinderQueryResult` / `OsmfinderGeometryResult` / `list[OpenStreetMapExtract]` | `OsmfinderDownloadResult` |
 | `find_extract_by_query` | name / id | `OsmfinderQueryResult` |
-| `get_available_extracts` | — | `list[OpenStreetMapExtract]` |
 | `find_extracts_by_geometry` | geometry | `OsmfinderGeometryResult` |
 | `find_extracts_covering_point` | point | `list[OpenStreetMapExtract]` |
-| `download` | name / id / geometry / result / extracts | `OsmfinderDownloadResult` |
-| `find` | name / id / geometry | `OsmfinderQueryResult \| OsmfinderGeometryResult` |
+| `get_available_extracts` | — | `list[OpenStreetMapExtract]` |
 | `display_available_extracts` | — | prints a tree |
 | `clear_osm_index_cache` | — | clears the local index cache |
 
