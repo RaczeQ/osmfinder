@@ -185,6 +185,25 @@ def _print_multiple_matches(matched_extracts: list[Any], query: str) -> None:
     )
 
 
+def _truncate_middle(text: str, max_length: int) -> str:
+    if len(text) <= max_length:
+        return text
+    keep = max_length - 3
+    left = keep // 2
+    right = keep - left
+    return text[:left] + "..." + text[-right:]
+
+
+def _get_id_max_length() -> int:
+    try:
+        width = Console().width
+        if width and width > 0:
+            return int(max(width - 80, 12))
+    except Exception:
+        pass
+    return 32
+
+
 def _print_geometry_result(result: OsmfinderGeometryResult) -> None:
     """Print a geometry result as a Rich table."""
     table = Table(
@@ -193,7 +212,7 @@ def _print_geometry_result(result: OsmfinderGeometryResult) -> None:
         header_style="bold magenta",
         title_style="bold blue",
     )
-    table.add_column("#", style="dim", width=4)
+    table.add_column("#", style="dim", width=2)
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Name", style="green")
     table.add_column("Area (km\u00b2)", justify="right", style="yellow")
@@ -204,14 +223,13 @@ def _print_geometry_result(result: OsmfinderGeometryResult) -> None:
 
     from osmfinder._typing import _calculate_geodetic_area
 
+    id_max = _get_id_max_length()
     row_idx = 1
     for step in result.steps:
-        # if not step.selected:
-        #     continue
         area = _calculate_geodetic_area(step.extract.geometry)
         table.add_row(
             str(row_idx),
-            step.extract.id,
+            _truncate_middle(step.extract.id, max_length=id_max),
             step.extract.name,
             f"{area:.2f}",
             f"{step.iou:.4f}",

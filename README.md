@@ -109,8 +109,38 @@ The package also provides a [Typer](https://typer.tiangolo.com/)-based CLI.
 # Search and download by name
 osmfinder search Monaco --output files/
 
-# Find extracts covering a bounding box
+# Search without download
+osmfinder search Monaco --dry-run
+                                        Query: Monaco
+┏━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃ #    ┃ Selected   ┃ ID                    ┃ Name   ┃ File name               ┃ Area (km²) ┃
+┡━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩
+│ 1    │ ✔          │ Movisda-admin_MC      │ Monaco │ movisda-admin_monaco    │      80.01 │
+│ 2    │            │ GEO2Day_europe_monaco │ monaco │ geo2day_europe_monaco   │     101.88 │
+│ 3    │            │ osmfr_europe_monaco   │ monaco │ osmfr_europe_monaco     │     101.88 │
+│ 4    │            │ Geofabrik_monaco      │ monaco │ geofabrik_europe_monaco │     184.39 │
+└──────┴────────────┴───────────────────────┴────────┴─────────────────────────┴────────────┘
+
+# Find and download extracts covering a bounding box
 osmfinder covers --bbox 2.11,48.77,2.54,48.98 --source Geofabrik
+
+osmfinder covers --dry-run --wkt "POLYGON ((9.8 47.2, 9.8 47.6, 9.4 47.6, 9.4 47.2, 9.8 47.2))"
+                                            Geometry covering result
+┏━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━┓
+┃    ┃                                  ┃            ┃            ┃        ┃       Cum. ┃          ┃           ┃
+┃ #  ┃ ID                               ┃ Name       ┃ Area (km²) ┃    IoU ┃   Coverage ┃ Status   ┃ Reason    ┃
+┡━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━┩
+│ 1  │ GEO2Day_europe...tria_vorarlberg │ vorarlberg │    2748.28 │ 0.1820 │      46.9% │ selected │ first_ex… │
+│ 2  │ GEO2Day_europe...nd_saint_gallen │ saint_gal… │    2565.17 │ 0.1797 │      84.1% │ selected │ selected  │
+│ 3  │ Movisda-admin_LI                 │ Liechtens… │     159.04 │ 0.0624 │      85.7% │ selected │ selected  │
+│ 4  │ GEO2Day_europe...zerland_thurgau │ thurgau    │    1092.62 │ 0.0462 │      85.7% │ rejected │ redundant │
+│ 5  │ BBBike_Konstanz                  │ Konstanz   │    4471.33 │ 0.0302 │     100.0% │ selected │ selected  │
+└────┴──────────────────────────────────┴────────────┴────────────┴────────┴────────────┴──────────┴───────────┘
+╭────────────────────────────────────────────────── Summary ───────────────────────────────────────────────────╮
+│ Coverage: 100.0%                                                                                             │
+│ IoU threshold: 0.01                                                                                          │
+│ Sources used: BBBike, GEO2Day, Geofabrik, Movisda-admin, Movisda-grid, osmfr                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 # Find extracts from a GeoJSON file
 osmfinder covers --file area.geojson --output downloads/
