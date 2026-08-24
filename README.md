@@ -163,6 +163,21 @@ osmfinder.find_extract_by_query("Berlin", ["Geofabrik", "BBBike"])
 osmfinder.find_extract_by_query("Berlin", "geofabrik,bbbike")
 ```
 
+## Public API
+
+| Function | Search by | Returns |
+|---|---|---|
+| `find` | name / id / geometry | `OsmfinderQueryResult \| OsmfinderGeometryResult` |
+| `download` | name / id / geometry / `OsmfinderQueryResult` / `OsmfinderGeometryResult` / `list[OpenStreetMapExtract]` | `OsmfinderDownloadResult` |
+| `find_extract_by_query` | name / id | `OsmfinderQueryResult` |
+| `find_extracts_by_geometry` | geometry | `OsmfinderGeometryResult` |
+| `find_extracts_covering_point` | point | `list[OpenStreetMapExtract]` |
+| `get_available_extracts` | — | `list[OpenStreetMapExtract]` |
+| `display_available_extracts` | — | prints a tree |
+| `clear_osm_index_cache` | — | clears the local index cache |
+
+> **Note:** `find()` and `download()` are dual-purpose helpers. When called with a **string query** they return an `OsmfinderQueryResult` / `OsmfinderDownloadResult`. When called with a **geometry** they return an `OsmfinderGeometryResult` / `OsmfinderDownloadResult`.
+
 ## Result classes
 
 All find and download operations return typed result objects instead of raw lists.
@@ -270,21 +285,6 @@ OsmfinderDownloadResult
       matched extracts: Movisda-admin_MC, Geofabrik_monaco, BBBike_Monaco, OSM_fr_monaco, geofabrik_andorra, +3 more
       sources used: Geofabrik, BBBike, OSM_fr, Movisda-admin, GEO2Day
 ```
-
-## Public API
-
-| Function | Search by | Returns |
-|---|---|---|
-| `find` | name / id / geometry | `OsmfinderQueryResult \| OsmfinderGeometryResult` |
-| `download` | name / id / geometry / `OsmfinderQueryResult` / `OsmfinderGeometryResult` / `list[OpenStreetMapExtract]` | `OsmfinderDownloadResult` |
-| `find_extract_by_query` | name / id | `OsmfinderQueryResult` |
-| `find_extracts_by_geometry` | geometry | `OsmfinderGeometryResult` |
-| `find_extracts_covering_point` | point | `list[OpenStreetMapExtract]` |
-| `get_available_extracts` | — | `list[OpenStreetMapExtract]` |
-| `display_available_extracts` | — | prints a tree |
-| `clear_osm_index_cache` | — | clears the local index cache |
-
-> **Note:** `find()` and `download()` are dual-purpose helpers. When called with a **string query** they return an `OsmfinderQueryResult` / `OsmfinderDownloadResult`. When called with a **geometry** they return an `OsmfinderGeometryResult` / `OsmfinderDownloadResult`.
 
 ## Index cache
 
