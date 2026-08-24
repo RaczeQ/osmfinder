@@ -90,6 +90,8 @@ def _download_single_extract(
     import shutil
     import tempfile
 
+    download_directory.mkdir(parents=True, exist_ok=True)
+
     with tempfile.TemporaryDirectory(dir=download_directory) as tmp_dir:
         downloaded = retrieve(
             extract.url,
@@ -163,7 +165,7 @@ OsmExtractSourceLike = OsmExtractSource | str | Iterable[OsmExtractSource | str]
 
 def _download_with_retry_query(
     query: str,
-    source: OsmExtractSourceLike,
+    source: OsmExtractSourceLike | None,
     download_directory: Path,
     *,
     select_first_match: bool = True,
@@ -246,7 +248,7 @@ def _download_with_retry_query(
 
 def _download_with_retry_geometry(
     geometry: BaseGeometry,
-    source: OsmExtractSourceLike,
+    source: OsmExtractSourceLike | None,
     download_directory: Path,
     *,
     geometry_coverage_iou_threshold: float = 0.01,
@@ -336,7 +338,7 @@ def _download_with_retry_geometry(
     )
 
 
-def _resolve_extract_sources(source: OsmExtractSourceLike) -> list[OsmExtractSource]:
+def _resolve_extract_sources(source: OsmExtractSourceLike | None) -> list[OsmExtractSource]:
     """
     Normalize a source specification into a list of concrete OSM extract sources.
 
@@ -345,7 +347,8 @@ def _resolve_extract_sources(source: OsmExtractSourceLike) -> list[OsmExtractSou
     Duplicates are removed while preserving order.
 
     Args:
-        source (OsmExtractSourceLike): Source specification.
+        source (OsmExtractSourceLike | None): Source specification. Defaults to `any` when
+            `None`.
 
     Raises:
         ValueError: If a provided value can't be parsed to an `OsmExtractSource`,
@@ -354,8 +357,10 @@ def _resolve_extract_sources(source: OsmExtractSourceLike) -> list[OsmExtractSou
     Returns:
         list[OsmExtractSource]: List of concrete sources (without `any`).
     """
-    if isinstance(source, OsmExtractSource):
-        raw_values: list[OsmExtractSource | str] = [source]
+    if source is None:
+        raw_values: list[OsmExtractSource | str] = ["any"]
+    elif isinstance(source, OsmExtractSource):
+        raw_values = [source]
     elif isinstance(source, str):
         raw_values = source.split(",")
     else:
@@ -389,7 +394,7 @@ def _resolve_extract_sources(source: OsmExtractSourceLike) -> list[OsmExtractSou
     return sorted(deduplicated, key=lambda s: s.value.lower())
 
 
-def _get_index_for_sources(source: OsmExtractSourceLike) -> OsmExtractsIndex:
+def _get_index_for_sources(source: OsmExtractSourceLike | None) -> OsmExtractsIndex:
     """
     Load and combine extract indexes for one or multiple sources.
 
@@ -439,7 +444,10 @@ def find_extract_by_query(query: str) -> OsmfinderQueryResult: ...
 
 
 @overload
-def find_extract_by_query(query: str, source: OsmExtractSourceLike) -> OsmfinderQueryResult: ...
+def find_extract_by_query(
+    query: str,
+    source: OsmExtractSourceLike | None,
+) -> OsmfinderQueryResult: ...
 
 
 @overload
@@ -454,7 +462,7 @@ def find_extract_by_query(
 @overload
 def find_extract_by_query(
     query: str,
-    source: OsmExtractSourceLike,
+    source: OsmExtractSourceLike | None,
     select_first_match: bool = ...,
     excluded_extracts_ids: set[str] | None = ...,
 ) -> OsmfinderQueryResult: ...
@@ -462,7 +470,7 @@ def find_extract_by_query(
 
 def find_extract_by_query(
     query: str,
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     select_first_match: bool = True,
     excluded_extracts_ids: set[str] | None = None,
 ) -> OsmfinderQueryResult:
@@ -644,7 +652,7 @@ def display_available_extracts(
 
 
 def get_available_extracts(
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     excluded_extracts_ids: set[str] | None = None,
 ) -> list[OpenStreetMapExtract]:
     """
@@ -690,7 +698,7 @@ def get_available_extracts(
 
 def find_extracts_by_geometry(
     geometry: BaseGeometry,
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
     excluded_extracts_ids: set[str] | None = None,
@@ -732,7 +740,8 @@ def find_extracts_by_geometry(
             Defaults to 0.99.
 
     Returns:
-        list[OpenStreetMapExtract]: List of extracts name, URL to download it and boundary polygon.
+        OsmfinderGeometryResult: Result containing extracts name, URL to download it
+        and boundary polygon.
 
     Examples:
         >>> import osmfinder
@@ -788,7 +797,7 @@ def find_extracts_by_geometry(
 @overload
 def find_extracts_covering_point(
     point: tuple[float, float],
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     excluded_extracts_ids: set[str] | None = None,
 ) -> list[OpenStreetMapExtract]: ...
@@ -797,7 +806,7 @@ def find_extracts_covering_point(
 @overload
 def find_extracts_covering_point(
     point: Point,
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     excluded_extracts_ids: set[str] | None = None,
 ) -> list[OpenStreetMapExtract]: ...
@@ -805,7 +814,7 @@ def find_extracts_covering_point(
 
 def find_extracts_covering_point(
     point: tuple[float, float] | Point,
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     excluded_extracts_ids: set[str] | None = None,
 ) -> list[OpenStreetMapExtract]:
@@ -1489,7 +1498,7 @@ def _flatten_geometry(geometry: BaseGeometry) -> list[BaseGeometry]:
 @overload
 def find(
     query: str,
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     select_first_match: bool = True,
     excluded_extracts_ids: set[str] | None = None,
@@ -1499,7 +1508,7 @@ def find(
 @overload
 def find(
     query: BaseGeometry,
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
@@ -1511,7 +1520,7 @@ def find(
 
 def find(
     query: str | BaseGeometry,
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     select_first_match: bool = True,
     geometry_coverage_iou_threshold: float = 0.01,
@@ -1593,7 +1602,7 @@ def find(
 @overload
 def download(
     query: OsmfinderResult,
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
     progressbar: bool = True,
@@ -1605,7 +1614,7 @@ def download(
 @overload
 def download(
     query: OpenStreetMapExtract,
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
     progressbar: bool = True,
@@ -1617,7 +1626,7 @@ def download(
 @overload
 def download(
     query: list[OpenStreetMapExtract],
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
     progressbar: bool = True,
@@ -1629,7 +1638,7 @@ def download(
 @overload
 def download(
     query: str,
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
     select_first_match: bool = True,
@@ -1641,7 +1650,7 @@ def download(
 @overload
 def download(
     query: BaseGeometry,
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
     geometry_coverage_iou_threshold: float = 0.01,
@@ -1655,7 +1664,7 @@ def download(
 
 def download(
     query: str | BaseGeometry | OsmfinderResult | OpenStreetMapExtract | list[OpenStreetMapExtract],
-    source: OsmExtractSourceLike = "any",
+    source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
     select_first_match: bool = True,
@@ -1676,7 +1685,7 @@ def download(
         query: What to download. Accepts a string query, geometry, find result,
             single extract, or list of extracts. A string query or geometry triggers
             a find first; a result or extract list downloads directly.
-        source (OsmExtractSourceLike): OSM source name. Defaults to 'any'.
+        source (OsmExtractSourceLike | None): OSM source name. Defaults to `None`.
         download_directory (str | Path): Directory where files should be downloaded.
             Defaults to "files".
         select_first_match (bool): When multiple extracts match the query by name, select the
@@ -1752,7 +1761,7 @@ def download(
             if isinstance(query, OsmfinderQueryResult):
                 return download(
                     query.query,
-                    source=source or query.sources_used,
+                    source=source if source is not None else query.sources_used,
                     download_directory=download_directory,
                     select_first_match=True,
                     progressbar=progressbar,
@@ -1761,7 +1770,7 @@ def download(
             elif isinstance(query, OsmfinderGeometryResult):
                 return download(
                     query.input_geometry,
-                    source=source or query.sources_used,
+                    source=source if source is not None else query.sources_used,
                     download_directory=download_directory,
                     geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
                     allow_uncovered_geometry=allow_uncovered_geometry,
@@ -1780,7 +1789,7 @@ def download(
         )
         extracts_to_download = [query]
         ignore_unavailable = True
-    elif isinstance(query, list) and query and isinstance(query[0], OpenStreetMapExtract):
+    elif isinstance(query, list) and all(isinstance(e, OpenStreetMapExtract) for e in query):
         find_result = OsmfinderResult(
             extracts=query,
             sources_used=[],

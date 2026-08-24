@@ -123,9 +123,8 @@ def test_download_query_result_no_retry_raises(mocker: MockerFixture) -> None:
 
     mocker.patch("osmfinder.finder._download_single_extract", side_effect=fake_download)
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        with pytest.warns(OsmExtractMultipleMatchesWarning):
-            result = find_extract_by_query("Vatican City")
+    with pytest.warns(OsmExtractMultipleMatchesWarning):
+        result = find_extract_by_query("Vatican City")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         with pytest.raises(HTTPError):
