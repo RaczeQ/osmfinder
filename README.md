@@ -284,12 +284,7 @@ OsmfinderDownloadResult
 | `display_available_extracts` | — | prints a tree |
 | `clear_osm_index_cache` | — | clears the local index cache |
 
-> **Note:** `find()` and `download()` are dual-purpose helpers. When called with a **string query** they
-> return an `OsmfinderQueryResult` / `OsmfinderDownloadResult`. When called with a **geometry** they
-> return an `OsmfinderGeometryResult` / `OsmfinderDownloadResult`. When called with a result or
-> extract list they return an `OsmfinderDownloadResult`. Use the explicit
-> `find_extract_by_query` / `find_extracts_by_geometry` if you want a single object without the
-> download wrapper.
+> **Note:** `find()` and `download()` are dual-purpose helpers. When called with a **string query** they return an `OsmfinderQueryResult` / `OsmfinderDownloadResult`. When called with a **geometry** they return an `OsmfinderGeometryResult` / `OsmfinderDownloadResult`.
 
 ## Index cache
 
