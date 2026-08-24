@@ -1143,11 +1143,12 @@ def test_cumulative_coverage_redundant_step_carries_forward(mocker: MockerFixtur
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
 
-    result = find_extracts_by_geometry(box(0, 0, 1, 1), "any")
+    result = find_extracts_by_geometry(box(0, 0, 1.1, 1.1), "any")
     redundant_steps = [s for s in result.steps if s.reason == "redundant"]
-    if redundant_steps:
-        last_selected_coverage = next(
-            (s.cumulative_coverage for s in reversed(result.steps) if s.selected), 0.0
-        )
-        for step in redundant_steps:
+    assert redundant_steps
+    last_selected_coverage = 0.0
+    for step in result.steps:
+        if step.selected:
+            last_selected_coverage = step.cumulative_coverage
+        elif step.reason == "redundant":
             assert step.cumulative_coverage == last_selected_coverage

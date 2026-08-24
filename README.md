@@ -124,6 +124,7 @@ osmfinder search Monaco --dry-run
 # Find and download extracts covering a bounding box
 osmfinder covers --bbox 2.11,48.77,2.54,48.98 --source Geofabrik
 
+# Find extracts without download
 osmfinder covers --dry-run --wkt "POLYGON ((9.8 47.2, 9.8 47.6, 9.4 47.6, 9.4 47.2, 9.8 47.2))"
                                             Geometry covering result
 ┏━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━┓

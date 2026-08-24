@@ -795,9 +795,8 @@ def find_extracts_by_geometry(
                 last_coverage = min(1.0, covered_area / input_area)
             else:
                 last_coverage = 1.0 if covered_area == 0 else 0.0
-            step.cumulative_coverage = last_coverage
-        else:
-            step.cumulative_coverage = last_coverage
+
+        step.cumulative_coverage = last_coverage
 
     covered_geometry = (
         unary_union([e.geometry for e in extracts]).intersection(geometry)
