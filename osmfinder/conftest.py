@@ -22,6 +22,7 @@ def _mock_download_single_extract(
     extract: OpenStreetMapExtract,
     download_directory: Path,
     progressbar: bool = True,
+    force_refresh: bool = False,
 ) -> Path:
     """Create an empty PBF file instead of downloading from the internet."""
     download_directory = Path(download_directory)
