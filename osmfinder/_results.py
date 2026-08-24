@@ -65,6 +65,11 @@ class OsmfinderResult:
         """
         Download all extracts in this result as PBF files.
 
+        When ``retry_on_unavailable`` is ``True`` (the default), unavailable extracts
+        are excluded and the search is retried. On success, ``download_paths`` contains
+        only the extracts downloaded in the final successful attempt; ``unavailable_extracts``
+        accumulates all extracts that failed across every attempt.
+
         Args:
             download_directory (str | Path): Directory where PBF files should be saved.
                 Defaults to "files".
@@ -257,7 +262,12 @@ class GeometryCoveringStep:
 
 @dataclass
 class OsmfinderDownloadResult:
-    """Result of downloading extracts."""
+    """
+    Result of downloading extracts.
+
+    ``download_paths`` contains only the extracts from the final successful attempt.
+    ``unavailable_extracts`` accumulates all extracts that failed across every retry attempt.
+    """
 
     find_result: OsmfinderResult
     download_paths: list[Path]

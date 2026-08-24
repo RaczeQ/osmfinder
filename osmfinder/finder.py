@@ -175,6 +175,11 @@ def _download_with_retry_query(
     """
     Download a query string, retrying with alternative extracts if some are unavailable.
 
+    Retries by excluding unavailable extracts from subsequent attempts. On success,
+    returns only the extracts downloaded in the final successful attempt. The
+    ``unavailable_extracts`` list accumulates all extracts that failed across
+    every attempt.
+
     Args:
         query: Text query to search for.
         source: OSM source name.
@@ -260,6 +265,11 @@ def _download_with_retry_geometry(
 ) -> OsmfinderDownloadResult:
     """
     Download geometry coverage, retrying without unavailable extracts.
+
+    Retries by excluding unavailable extracts from subsequent attempts. On success,
+    returns only the extracts downloaded in the final successful attempt. The
+    ``unavailable_extracts`` list accumulates all extracts that failed across
+    every attempt.
 
     Args:
         geometry: Geometry to cover.
@@ -1694,6 +1704,11 @@ def download(
     """
     Download OSM extracts.
 
+    When ``retry_on_unavailable`` is ``True`` (the default), unavailable extracts
+    are excluded and the search is retried. On success, ``download_paths`` contains
+    only the extracts from the final successful attempt; ``unavailable_extracts``
+    accumulates all extracts that failed across every attempt.
+
     Accepts a string query, a geometry, a find result, a single extract, or a list of extracts.
 
     Args:
@@ -1717,10 +1732,12 @@ def download(
         progressbar (bool): Show progress bar. Defaults to True.
         force_refresh (bool): When ``True``, re-download even if the file already exists.
             Defaults to False.
-        retry_on_unavailable (bool): When ``True`` and the query is an ``OsmfinderResult``,
-            unavailable extracts are excluded and the search is retried. When ``False``,
-            the result's extracts are downloaded as-is and unavailable extracts raise
-            an exception. Defaults to ``True``.
+        retry_on_unavailable (bool): When ``True``, unavailable extracts are excluded
+            and the search is retried. On success, ``download_paths`` contains only
+            the extracts from the final successful attempt, while ``unavailable_extracts``
+            accumulates all failures across every attempt. When ``False``, the result's
+            extracts are downloaded as-is and unavailable extracts raise an exception.
+            Defaults to ``True``.
 
     Returns:
         OsmfinderDownloadResult: Result containing downloaded paths and find result.
