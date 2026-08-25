@@ -1,4 +1,4 @@
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, cast
@@ -43,6 +43,10 @@ class OsmExtractSource(str, Enum):
             if member.lower() == value:
                 return member
         return None
+
+
+# A single source, or multiple sources passed as an iterable or a comma-separated string.
+OsmExtractSourceLike = OsmExtractSource | str | Iterable[OsmExtractSource | str]
 
 
 class OsmExtractsIndex:
