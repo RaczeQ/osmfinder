@@ -18,7 +18,7 @@ def parse_polygon_file(polygon_url: str) -> MultiPolygon | None:  # pragma: no c
         polygon_url (str): URL to load a poly file.
 
     Returns:
-        Optional[MultiPolygon]: Parsed polygon.
+        MultiPolygon | None: Parsed polygon.
             Empty if request returns 404 not found.
     """
     result = requests.get(

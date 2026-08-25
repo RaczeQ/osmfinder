@@ -23,7 +23,7 @@ def _mock_download_precalculated_index_from_github(destination_path: Path) -> bo
 
 
 def _mock_download_single_extract(
-    extract, download_directory: Path, progressbar: bool = True
+    extract, download_directory: Path, progressbar: bool = True, force_refresh: bool = False
 ) -> Path:
     """Create an empty PBF file instead of downloading from the internet."""
     download_directory = Path(download_directory)

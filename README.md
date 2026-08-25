@@ -40,6 +40,8 @@ pip install osmfinder
 
 ## Usage
 
+### Python
+
 ```python
 import osmfinder
 from shapely.geometry import box
@@ -75,7 +77,7 @@ print(extracts[0].id)           # 'Geofabrik_greater-london'
 
 # --- force single extract ---
 geometry = box(9.4, 47.2, 9.8, 47.6)
-result = osmfinder.find_smallest_containing_extracts(
+result = osmfinder.find_extracts_by_geometry(
     geometry, force_single_result=False  # default behaviour
 )
 print(len(result.extracts))     # 4
@@ -84,7 +86,7 @@ print(result.extracts[1].id)    # 'BBBike_Konstanz'
 print(result.extracts[2].id)    # 'GEO2Day_europe_switzerland_saint_gallen'
 print(result.extracts[3].id)    # 'Movisda-admin_LI'
 
-result = osmfinder.find_smallest_containing_extracts(
+result = osmfinder.find_extracts_by_geometry(
     geometry, force_single_result=True
 )
 print(len(result.extracts))     # 1
@@ -99,23 +101,103 @@ for extract in extracts:
     print(extract.id, extract.file_name)
 ```
 
+### CLI
+
+The package also provides a [Typer](https://typer.tiangolo.com/)-based CLI.
+
+```bash
+# Search and download by name
+osmfinder search Monaco --output files/
+
+# Search without download
+osmfinder search Monaco --dry-run
+                                        Query: Monaco
+┏━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃ #    ┃ Selected   ┃ ID                    ┃ Name   ┃ File name               ┃ Area (km²) ┃
+┡━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩
+│ 1    │ ✔          │ Movisda-admin_MC      │ Monaco │ movisda-admin_monaco    │      80.01 │
+│ 2    │            │ GEO2Day_europe_monaco │ monaco │ geo2day_europe_monaco   │     101.88 │
+│ 3    │            │ osmfr_europe_monaco   │ monaco │ osmfr_europe_monaco     │     101.88 │
+│ 4    │            │ Geofabrik_monaco      │ monaco │ geofabrik_europe_monaco │     184.39 │
+└──────┴────────────┴───────────────────────┴────────┴─────────────────────────┴────────────┘
+
+# Find and download extracts covering a bounding box
+osmfinder covers --bbox 2.11,48.77,2.54,48.98 --source Geofabrik
+
+# Find extracts without download
+osmfinder covers --dry-run --wkt "POLYGON ((9.8 47.2, 9.8 47.6, 9.4 47.6, 9.4 47.2, 9.8 47.2))"
+                                            Geometry covering result
+┏━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━┓
+┃    ┃                                  ┃            ┃            ┃        ┃       Cum. ┃          ┃           ┃
+┃ #  ┃ ID                               ┃ Name       ┃ Area (km²) ┃    IoU ┃   Coverage ┃ Status   ┃ Reason    ┃
+┡━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━┩
+│ 1  │ GEO2Day_europe...tria_vorarlberg │ vorarlberg │    2748.28 │ 0.1820 │      46.9% │ selected │ first_ex… │
+│ 2  │ GEO2Day_europe...nd_saint_gallen │ saint_gal… │    2565.17 │ 0.1797 │      84.1% │ selected │ selected  │
+│ 3  │ Movisda-admin_LI                 │ Liechtens… │     159.04 │ 0.0624 │      85.7% │ selected │ selected  │
+│ 4  │ GEO2Day_europe...zerland_thurgau │ thurgau    │    1092.62 │ 0.0462 │      85.7% │ rejected │ redundant │
+│ 5  │ BBBike_Konstanz                  │ Konstanz   │    4471.33 │ 0.0302 │     100.0% │ selected │ selected  │
+└────┴──────────────────────────────────┴────────────┴────────────┴────────┴────────────┴──────────┴───────────┘
+╭────────────────────────────────────────────────── Summary ───────────────────────────────────────────────────╮
+│ Coverage: 100.0%                                                                                             │
+│ IoU threshold: 0.01                                                                                          │
+│ Sources used: BBBike, GEO2Day, Geofabrik, Movisda-admin, Movisda-grid, osmfr                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+# Find extracts from a GeoJSON file
+osmfinder covers --file area.geojson --output downloads/
+
+# List available extracts
+osmfinder list --source Geofabrik
+
+# Clear the local index cache
+osmfinder clear
+```
+
 ### Sources
 
 The `source` argument accepts a single value, an iterable, or a comma-separated string. Available
 values: `any`, `Geofabrik`, `BBBike`, `osmfr`, `GEO2Day`, `Movisda-admin`, `Movisda-grid`.
 
 ```python
-osmfinder.get_extract_by_query("Berlin", ["Geofabrik", "BBBike"])
-osmfinder.get_extract_by_query("Berlin", "geofabrik,bbbike")
+osmfinder.find_extract_by_query("Berlin", ["Geofabrik", "BBBike"])
+osmfinder.find_extract_by_query("Berlin", "geofabrik,bbbike")
 ```
+
+## Public API
+
+| Function | Search by | Returns |
+|---|---|---|
+| `find` | name / id / geometry | `OsmfinderQueryResult \| OsmfinderGeometryResult` |
+| `download` | name / id / geometry / `OsmfinderQueryResult` / `OsmfinderGeometryResult` / `list[OpenStreetMapExtract]` | `OsmfinderDownloadResult` |
+| `find_extract_by_query` | name / id | `OsmfinderQueryResult` |
+| `find_extracts_by_geometry` | geometry | `OsmfinderGeometryResult` |
+| `find_extracts_covering_point` | point | `list[OpenStreetMapExtract]` |
+| `get_available_extracts` | — | `list[OpenStreetMapExtract]` |
+| `display_available_extracts` | — | prints a tree |
+| `clear_osm_index_cache` | — | clears the local index cache |
+
+> **Note:** `find()` and `download()` are dual-purpose helpers. When called with a **string query** they return an `OsmfinderQueryResult` / `OsmfinderDownloadResult`. When called with a **geometry** they return an `OsmfinderGeometryResult` / `OsmfinderDownloadResult`.
 
 ## Result classes
 
 All find and download operations return typed result objects instead of raw lists.
 
+### `OpenStreetMapExtract`
+
+Metadata object returned by search and listing operations.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `id` | `str` | Unique extract identifier (e.g. `Geofabrik_monaco`) |
+| `name` | `str` | Human-readable extract name |
+| `parent` | `str` | Parent extract identifier in the source hierarchy |
+| `url` | `str` | Download URL for the `.osm.pbf` file |
+| `geometry` | `BaseGeometry` | Boundary polygon of the extract |
+| `file_name` | `str` | Full file name derived from the parent hierarchy |
+
 ### `OsmfinderQueryResult`
 
-Returned by `get_extract_by_query()` and `find()` when called with a string query.
+Returned by `find_extract_by_query()` and `find()` when called with a string query.
 
 | Attribute | Type | Description |
 |---|---|---|
@@ -127,7 +209,7 @@ Returned by `get_extract_by_query()` and `find()` when called with a string quer
 
 ### `OsmfinderGeometryResult`
 
-Returned by `find_smallest_containing_extracts()` and `find()` when called with a geometry.
+Returned by `find_extracts_by_geometry()` and `find()` when called with a geometry.
 
 | Attribute | Type | Description |
 |---|---|---|
@@ -141,7 +223,7 @@ Returned by `find_smallest_containing_extracts()` and `find()` when called with 
 
 ### `OsmfinderDownloadResult`
 
-Returned by `download_extract_by_query()`, `find_and_download_extracts_pbf_files()`, and `download()`.
+Returned by `download()`.
 
 | Attribute | Type | Description |
 |---|---|---|
@@ -158,9 +240,10 @@ Record of a single extract considered during geometry covering.
 | `extract` | `OpenStreetMapExtract` | The extract considered |
 | `iou` | `float` | Intersection over Union with the remaining geometry |
 | `selected` | `bool` | Whether the extract was selected |
-| `reason` | `str` | Selection reason (`"selected"` or `"low_iou"`) |
+| `reason` | `str` | Selection reason (`"first_extract"`, `"selected"`, `"low_iou"` or `"redundant"`) |
 | `geometry_to_cover` | `BaseGeometry` | Remaining geometry before this step |
 | `intersection_geometry` | `BaseGeometry` | Intersection of the extract with the remaining geometry |
+| `cumulative_coverage` | `float` | Cumulative coverage of the input geometry up to this step |
 
 ### Example `repr` output
 
@@ -202,24 +285,6 @@ OsmfinderDownloadResult
       matched extracts: Movisda-admin_MC, Geofabrik_monaco, BBBike_Monaco, OSM_fr_monaco, geofabrik_andorra, +3 more
       sources used: Geofabrik, BBBike, OSM_fr, Movisda-admin, GEO2Day
 ```
-
-## Public API
-
-| Function | Search by | Returns |
-|---|---|---|
-| `get_extract_by_query` | name / id | `OsmfinderQueryResult` |
-| `get_available_extracts` | — | `list[OpenStreetMapExtract]` |
-| `download_extract_by_query` | name / id | `OsmfinderDownloadResult` |
-| `find_smallest_containing_extracts` | geometry | `OsmfinderGeometryResult` |
-| `find_and_download_extracts_pbf_files` | geometry | `OsmfinderDownloadResult` |
-| `download_extracts_pbf_files` | list of extracts | `list[Path]` |
-| `display_available_extracts` | — | prints a tree |
-| `clear_osm_index_cache` | — | clears the local index cache |
-
-> **Note:** `find()` and `download()` are dual-purpose helpers. When called with a **string query** they
-> return an `OsmfinderQueryResult` / `OsmfinderDownloadResult`. When called with a **geometry** they
-> return an `OsmfinderGeometryResult` / `OsmfinderDownloadResult`. Use the explicit
-> `get_extract_by_query` / `download_extract_by_query` if you want a single object without the list wrapper.
 
 ## Index cache
 

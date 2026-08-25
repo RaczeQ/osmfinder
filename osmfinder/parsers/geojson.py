@@ -1,6 +1,8 @@
 """GeoJSON file parser function."""
 
-from typing import TYPE_CHECKING, Any, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import requests
 
@@ -12,7 +14,7 @@ if TYPE_CHECKING:  # pragma: no cover
 __all__ = ["parse_geojson_file"]
 
 
-def parse_geojson_file(geojson_url: str) -> Optional["BaseGeometry"]:  # pragma: no cover
+def parse_geojson_file(geojson_url: str) -> BaseGeometry | None:  # pragma: no cover
     """
     Parse a GeoJSON file from URL into a single geometry describing the region extent.
 
@@ -20,7 +22,7 @@ def parse_geojson_file(geojson_url: str) -> Optional["BaseGeometry"]:  # pragma:
         geojson_url (str): URL to load a GeoJSON file.
 
     Returns:
-        Optional[BaseGeometry]: Parsed geometry, or `None` if the request returns 404 not found
+        BaseGeometry | None: Parsed geometry, or `None` if the request returns 404 not found
             or the file contains no geometry.
     """
     result = requests.get(
@@ -34,7 +36,7 @@ def parse_geojson_file(geojson_url: str) -> Optional["BaseGeometry"]:  # pragma:
     return parse_geojson(result.json())
 
 
-def parse_geojson(data: dict[str, Any]) -> Optional["BaseGeometry"]:
+def parse_geojson(data: dict[str, Any]) -> BaseGeometry | None:
     """
     Parse a parsed GeoJSON object into a single geometry.
 
@@ -45,7 +47,7 @@ def parse_geojson(data: dict[str, Any]) -> Optional["BaseGeometry"]:
         data (dict[str, Any]): Parsed GeoJSON content.
 
     Returns:
-        Optional[BaseGeometry]: Combined geometry, or `None` if there is no geometry.
+        BaseGeometry | None: Combined geometry, or `None` if there is no geometry.
     """
     from shapely.geometry import shape
 

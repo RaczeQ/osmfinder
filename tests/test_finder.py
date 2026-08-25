@@ -22,9 +22,9 @@ from osmfinder.exceptions import (
 from osmfinder.finder import (
     _get_index_for_sources,
     _resolve_extract_sources,
+    find_extract_by_query,
+    find_extracts_by_geometry,
     find_extracts_covering_point,
-    find_smallest_containing_extracts,
-    get_extract_by_query,
 )
 from tests._helpers import _index_from_extracts, _index_from_records
 
@@ -202,7 +202,7 @@ def test_uncovered_geometry_extract(
             "POLYGON ((-43.064 29.673, -43.064 29.644, -43.017 29.644,"
             " -43.017 29.673, -43.064 29.673))"
         )
-        find_smallest_containing_extracts(
+        find_extracts_by_geometry(
             geometry=geometry,
             source="any",
             allow_uncovered_geometry=allow_uncovered_geometry,
@@ -216,12 +216,12 @@ def test_excluded_extracts_ids() -> None:
 
     geometry = geocode_to_geometry("Andorra")
 
-    result = find_smallest_containing_extracts(geometry, "geofabrik")
+    result = find_extracts_by_geometry(geometry, "geofabrik")
     extracts = result.extracts
     assert [extract.file_name for extract in extracts] == ["geofabrik_europe_andorra"]
 
     excluded_extracts_ids = {extracts[0].id}
-    fallback_result = find_smallest_containing_extracts(
+    fallback_result = find_extracts_by_geometry(
         geometry,
         source="geofabrik",
         excluded_extracts_ids=excluded_extracts_ids,
@@ -263,17 +263,17 @@ def test_select_first_match(mocker: MockerFixture) -> None:
 
     # Default (True): selects the smallest-area match (osmfr, box 0,0,1,1) and warns.
     with pytest.warns(OsmExtractMultipleMatchesWarning):
-        result = get_extract_by_query("Vatican City")
+        result = find_extract_by_query("Vatican City")
     assert result.extract.id == "osmfr_x_vatican_city"
 
     # False: raises as before.
     with pytest.raises(OsmExtractMultipleMatchesError):
-        get_extract_by_query("Vatican City", select_first_match=False)
+        find_extract_by_query("Vatican City", select_first_match=False)
 
     # Single match: no warning regardless.
     with warnings.catch_warnings():
         warnings.simplefilter("error", OsmExtractMultipleMatchesWarning)
-        assert get_extract_by_query("enfield").extract.id == "Geofabrik_enfield"
+        assert find_extract_by_query("enfield").extract.id == "Geofabrik_enfield"
 
 
 @pytest.mark.parametrize(
@@ -384,7 +384,7 @@ def test_extracts_finding(
     """Test if extracts finding by name works."""
     with expectation as exception_info:
         # select_first_match=False so multiple matches still raise.
-        result = get_extract_by_query(query, source, select_first_match=False)
+        result = find_extract_by_query(query, source, select_first_match=False)
         # if properly found - check id
         assert result.extract.id == matched_id
 
@@ -485,7 +485,7 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
 )
 def test_single_smallest_extract(source: str, geometry: Any, expected_extract_id: str) -> None:
     """Test if extracts matching works correctly for geometries within borders."""
-    result = find_smallest_containing_extracts(geometry, source)
+    result = find_extracts_by_geometry(geometry, source)
     assert len(result.extracts) == 1
     assert result.extracts[0].id == expected_extract_id
 
@@ -549,7 +549,7 @@ def test_multiple_smallest_extracts(
     expected_extract_file_names: list[str],
 ) -> None:
     """Test if extracts matching works correctly for geometries between borders."""
-    result = find_smallest_containing_extracts(
+    result = find_extracts_by_geometry(
         geometry, source, geometry_coverage_iou_threshold=geometry_coverage_iou_threshold
     )
     assert sorted(extract.file_name for extract in result.extracts) == sorted(
@@ -560,7 +560,7 @@ def test_multiple_smallest_extracts(
 def test_geometry_covering_step_reasons() -> None:
     """Test if GeometryCoveringStep reasons are set correctly for all states."""
     geometry = from_wkt("POLYGON ((9.8 47.2, 9.8 47.6, 9.4 47.6, 9.4 47.2, 9.8 47.2))")
-    result = find_smallest_containing_extracts(geometry, "any")
+    result = find_extracts_by_geometry(geometry, "any")
     assert len(result.extracts) == 4
     assert len(result.steps) == 5
 
@@ -575,7 +575,7 @@ def test_geometry_covering_step_reasons() -> None:
 def test_geometry_covering_step_low_iou() -> None:
     """Test if low IoU extracts are marked with reason='low_iou'."""
     geometry = box(7.40, 43.71, 7.44, 43.75)
-    result = find_smallest_containing_extracts(geometry, "Geofabrik")
+    result = find_extracts_by_geometry(geometry, "Geofabrik")
     low_iou_steps = [step for step in result.steps if step.reason == "low_iou"]
     assert len(low_iou_steps) >= 1
     for step in low_iou_steps:
@@ -603,7 +603,7 @@ def test_force_single_result_complete_coverage(mocker: MockerFixture) -> None:
         ]
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
-    result = find_smallest_containing_extracts(geometry, force_single_result=True)
+    result = find_extracts_by_geometry(geometry, force_single_result=True)
     assert len(result.extracts) == 1
     assert result.extracts[0].id == "extract_b"
 
@@ -628,7 +628,7 @@ def test_force_single_result_default_threshold(mocker: MockerFixture) -> None:
         ]
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
-    result = find_smallest_containing_extracts(geometry, force_single_result=True)
+    result = find_extracts_by_geometry(geometry, force_single_result=True)
     assert len(result.extracts) == 1
     assert result.extracts[0].id == "extract_b"
 
@@ -659,7 +659,7 @@ def test_force_single_result_selects_highest_iou(mocker: MockerFixture) -> None:
         ]
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
-    result = find_smallest_containing_extracts(geometry, force_single_result=True)
+    result = find_extracts_by_geometry(geometry, force_single_result=True)
     assert len(result.extracts) == 1
     assert result.extracts[0].id == "extract_tight"
     assert result.steps[0].iou > 0.9
@@ -691,10 +691,10 @@ def test_force_single_result_with_095_threshold(mocker: MockerFixture) -> None:
         ]
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
-    result_099 = find_smallest_containing_extracts(
+    result_099 = find_extracts_by_geometry(
         geometry, force_single_result=True, single_result_iou_threshold=0.99
     )
-    result_095 = find_smallest_containing_extracts(
+    result_095 = find_extracts_by_geometry(
         geometry, force_single_result=True, single_result_iou_threshold=0.95
     )
     assert len(result_099.extracts) == 1
@@ -721,10 +721,10 @@ def test_force_single_result_threshold_rejects_low_iou(mocker: MockerFixture) ->
         ]
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
-    result_strict = find_smallest_containing_extracts(
+    result_strict = find_extracts_by_geometry(
         geometry, force_single_result=True, single_result_iou_threshold=0.99
     )
-    result_relaxed = find_smallest_containing_extracts(
+    result_relaxed = find_extracts_by_geometry(
         geometry, force_single_result=True, single_result_iou_threshold=0.40
     )
     assert len(result_strict.extracts) == 1
@@ -748,7 +748,7 @@ def test_force_single_result_no_extract_above_threshold(mocker: MockerFixture) -
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
     with pytest.raises(GeometryNotCoveredError):
-        find_smallest_containing_extracts(geometry, force_single_result=True)
+        find_extracts_by_geometry(geometry, force_single_result=True)
 
 
 def test_force_single_result_invalid_threshold_raises(mocker: MockerFixture) -> None:
@@ -766,11 +766,11 @@ def test_force_single_result_invalid_threshold_raises(mocker: MockerFixture) -> 
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
     with pytest.raises(ValueError):
-        find_smallest_containing_extracts(
+        find_extracts_by_geometry(
             geometry, force_single_result=True, single_result_iou_threshold=-0.1
         )
     with pytest.raises(ValueError):
-        find_smallest_containing_extracts(
+        find_extracts_by_geometry(
             geometry, force_single_result=True, single_result_iou_threshold=1.5
         )
 
@@ -778,8 +778,8 @@ def test_force_single_result_invalid_threshold_raises(mocker: MockerFixture) -> 
 def test_force_single_result_false_keeps_multi_result(mocker: MockerFixture) -> None:
     """Test that force_single_result=False preserves existing multi-result behavior."""
     geometry = from_wkt("POLYGON ((9.8 47.2, 9.8 47.6, 9.4 47.6, 9.4 47.2, 9.8 47.2))")
-    result_default = find_smallest_containing_extracts(geometry, "any")
-    result_forced = find_smallest_containing_extracts(geometry, "any", force_single_result=False)
+    result_default = find_extracts_by_geometry(geometry, "any")
+    result_forced = find_extracts_by_geometry(geometry, "any", force_single_result=False)
     assert len(result_default.extracts) == len(result_forced.extracts)
 
 
@@ -803,7 +803,7 @@ def test_force_single_result_prefers_non_complete_above_threshold(mocker: Mocker
         ]
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
-    result = find_smallest_containing_extracts(
+    result = find_extracts_by_geometry(
         geometry,
         force_single_result=True,
         single_result_iou_threshold=0.90,
@@ -834,7 +834,7 @@ def test_force_single_result_smallest_complete_cover(mocker: MockerFixture) -> N
         ]
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
-    result = find_smallest_containing_extracts(
+    result = find_extracts_by_geometry(
         geometry, force_single_result=True, single_result_iou_threshold=0.99
     )
     assert len(result.extracts) == 1
@@ -857,7 +857,7 @@ def test_force_single_result_warns_on_much_larger_extract(mocker: MockerFixture)
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
     with pytest.warns(GeometryNotCoveredWarning, match="is .*x larger than the query geometry"):
-        find_smallest_containing_extracts(geometry, force_single_result=True)
+        find_extracts_by_geometry(geometry, force_single_result=True)
 
 
 def test_force_single_result_allow_uncovered_geometry_no_candidates(mocker: MockerFixture) -> None:
@@ -875,9 +875,7 @@ def test_force_single_result_allow_uncovered_geometry_no_candidates(mocker: Mock
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
     with pytest.raises(GeometryNotCoveredError, match="No OSM extracts intersect"):
-        find_smallest_containing_extracts(
-            geometry, force_single_result=True, allow_uncovered_geometry=True
-        )
+        find_extracts_by_geometry(geometry, force_single_result=True, allow_uncovered_geometry=True)
 
 
 def test_force_single_result_falls_back_to_complete_cover(mocker: MockerFixture) -> None:
@@ -898,7 +896,7 @@ def test_force_single_result_falls_back_to_complete_cover(mocker: MockerFixture)
         ]
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
-    result = find_smallest_containing_extracts(
+    result = find_extracts_by_geometry(
         geometry,
         force_single_result=True,
         allow_uncovered_geometry=True,
@@ -1061,3 +1059,96 @@ def test_find_extracts_covering_point_invalid_source_raises(mocker: MockerFixtur
 
     with pytest.raises(ValueError, match="Unknown OSM extracts source"):
         find_extracts_covering_point((0.0, 0.0), source="nonexistent")
+
+
+def test_cumulative_coverage_increases_with_selected_steps(mocker: MockerFixture) -> None:
+    """Cumulative coverage should increase for each selected extract."""
+    index = _index_from_extracts(
+        [
+            {
+                "id": "a",
+                "name": "Left",
+                "parent": "root",
+                "geometry": box(0, 0, 1, 2),
+            },
+            {
+                "id": "b",
+                "name": "Right",
+                "parent": "root",
+                "geometry": box(1, 0, 2, 2),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(box(0, 0, 2, 2), "any")
+    selected_steps = [s for s in result.steps if s.selected]
+    assert len(selected_steps) == 2
+
+    coverages = [s.cumulative_coverage for s in selected_steps]
+    assert coverages[0] > 0
+    assert coverages[1] >= coverages[0]
+    assert abs(coverages[-1] - result.coverage) < 1e-4
+
+
+def test_cumulative_coverage_multipart_against_total_input(mocker: MockerFixture) -> None:
+    """Cumulative coverage is computed against the total multipart input."""
+    from shapely.geometry import MultiPolygon
+
+    poly_a = box(0, 0, 1, 1)
+    poly_b = box(2, 0, 3, 1)
+    multipart = MultiPolygon([poly_a, poly_b])
+
+    index = _index_from_extracts(
+        [
+            {
+                "id": "a",
+                "name": "Part A",
+                "parent": "root",
+                "geometry": poly_a,
+            },
+            {
+                "id": "b",
+                "name": "Part B",
+                "parent": "root",
+                "geometry": poly_b,
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(multipart, "any")
+    selected_steps = [s for s in result.steps if s.selected]
+    assert len(selected_steps) == 2
+    assert abs(selected_steps[-1].cumulative_coverage - 1.0) < 1e-6
+
+
+def test_cumulative_coverage_redundant_step_carries_forward(mocker: MockerFixture) -> None:
+    """Redundant steps carry forward the last cumulative coverage value."""
+    index = _index_from_extracts(
+        [
+            {
+                "id": "a",
+                "name": "Big",
+                "parent": "root",
+                "geometry": box(0, 0, 2, 2),
+            },
+            {
+                "id": "b",
+                "name": "Small",
+                "parent": "root",
+                "geometry": box(0, 0, 1, 1),
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(box(0, 0, 1.1, 1.1), "any")
+    redundant_steps = [s for s in result.steps if s.reason == "redundant"]
+    assert redundant_steps
+    last_selected_coverage = 0.0
+    for step in result.steps:
+        if step.selected:
+            last_selected_coverage = step.cumulative_coverage
+        elif step.reason == "redundant":
+            assert step.cumulative_coverage == last_selected_coverage

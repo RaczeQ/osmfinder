@@ -136,7 +136,7 @@ def test_geometry_repr_basic() -> None:
         covered_geometry=box(0, 0, 1, 1),
         uncovered_geometry=box(0, 0, 0, 0),
         steps=[step],
-        iou_threshold=0.01,
+        config={"geometry_coverage_iou_threshold": 0.01},
     )
     repr_str = repr(result)
     assert "OsmfinderGeometryResult" in repr_str
@@ -158,7 +158,7 @@ def test_geometry_repr_empty_extracts_and_steps() -> None:
         covered_geometry=box(0, 0, 0, 0),
         uncovered_geometry=box(0, 0, 1, 1),
         steps=[],
-        iou_threshold=0.01,
+        config={"geometry_coverage_iou_threshold": 0.01},
     )
     repr_str = repr(result)
     assert "extracts:\n    none" in repr_str
@@ -214,7 +214,7 @@ def test_step_repr_indented() -> None:
         covered_geometry=box(0, 0, 0, 0),
         uncovered_geometry=box(0, 0, 1, 1),
         steps=[step],
-        iou_threshold=0.01,
+        config={"geometry_coverage_iou_threshold": 0.01},
     )
     repr_str = repr(result)
     assert "    z — Zulu" in repr_str

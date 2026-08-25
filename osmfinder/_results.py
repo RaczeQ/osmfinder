@@ -1,14 +1,17 @@
 """Result classes for osmfinder find and download operations."""
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING
+from __future__ import annotations
 
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from matplotlib.axes import Axes
     from shapely.geometry.base import BaseGeometry
+
+    from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource
 
 
 def _format_extract_list(extracts: list[OpenStreetMapExtract], max_items: int = 5) -> str:
@@ -37,12 +40,13 @@ def _format_id_list(extracts: list[OpenStreetMapExtract], max_items: int = 5) ->
     return ", ".join(parts)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class OsmfinderResult:
     """Base class for all osmfinder results."""
 
     extracts: list[OpenStreetMapExtract]
     sources_used: list[OsmExtractSource]
+    config: dict[str, Any] = field(default_factory=dict)
 
     def __repr__(self) -> str:
         sources = _format_sources(self.sources_used)
@@ -50,6 +54,45 @@ class OsmfinderResult:
             f"{self.__class__.__name__}\n"
             f"  extracts: {_format_extract_list(self.extracts)}\n"
             f"  sources used: {sources}"
+        )
+
+    def download(
+        self,
+        download_directory: str | Path = "files",
+        progressbar: bool = True,
+        force_refresh: bool = False,
+        retry_on_unavailable: bool = True,
+    ) -> OsmfinderDownloadResult:
+        """
+        Download all extracts in this result as PBF files.
+
+        When ``retry_on_unavailable`` is ``True`` (the default), unavailable extracts
+        are excluded and the search is retried. On success, ``download_paths`` contains
+        only the extracts downloaded in the final successful attempt; ``unavailable_extracts``
+        accumulates all extracts that failed across every attempt.
+
+        Args:
+            download_directory (str | Path): Directory where PBF files should be saved.
+                Defaults to "files".
+            progressbar (bool): Show progress bar. Defaults to True.
+            force_refresh (bool): When ``True``, re-download even if the file already
+                exists. Defaults to False.
+            retry_on_unavailable (bool): When ``True`` and this is a query or geometry
+                result, unavailable extracts are excluded and the search is retried. When
+                ``False``, the result's extracts are downloaded as-is and unavailable extracts
+                raise an exception. Defaults to ``True``.
+
+        Returns:
+            OsmfinderDownloadResult: Result containing downloaded paths and find result.
+        """
+        from osmfinder.finder import download
+
+        return download(
+            self,
+            download_directory=download_directory,
+            progressbar=progressbar,
+            force_refresh=force_refresh,
+            retry_on_unavailable=retry_on_unavailable,
         )
 
 
@@ -93,11 +136,14 @@ class OsmfinderQueryResult(OsmfinderResult):
 class OsmfinderGeometryResult(OsmfinderResult):
     """Result of a geometry query."""
 
-    input_geometry: "BaseGeometry"
-    covered_geometry: "BaseGeometry"
-    uncovered_geometry: "BaseGeometry"
-    steps: list["GeometryCoveringStep"]
-    iou_threshold: float
+    input_geometry: BaseGeometry
+    covered_geometry: BaseGeometry
+    uncovered_geometry: BaseGeometry
+    steps: list[GeometryCoveringStep]
+
+    @property
+    def iou_threshold(self) -> float:
+        return float(self.config["geometry_coverage_iou_threshold"])
 
     @property
     def coverage(self) -> float:
@@ -139,7 +185,7 @@ class OsmfinderGeometryResult(OsmfinderResult):
             f"  sources used: {_format_sources(self.sources_used)}"
         )
 
-    def plot(self, ax: "Axes | None" = None, legend: bool = True) -> "Axes":
+    def plot(self, ax: Axes | None = None, legend: bool = True) -> Axes:
         """
         Plot extracts with input geometry.
 
@@ -210,8 +256,9 @@ class GeometryCoveringStep:
     iou: float
     selected: bool
     reason: str
-    geometry_to_cover: "BaseGeometry"
-    intersection_geometry: "BaseGeometry"
+    geometry_to_cover: BaseGeometry
+    intersection_geometry: BaseGeometry
+    cumulative_coverage: float = 0.0
 
     def __repr__(self) -> str:
         return f"GeometryCoveringStep({self.extract.id}, {self.extract.name})"
@@ -219,7 +266,12 @@ class GeometryCoveringStep:
 
 @dataclass
 class OsmfinderDownloadResult:
-    """Result of downloading extracts."""
+    """
+    Result of downloading extracts.
+
+    ``download_paths`` contains only the extracts from the final successful attempt.
+    ``unavailable_extracts`` accumulates all extracts that failed across every retry attempt.
+    """
 
     find_result: OsmfinderResult
     download_paths: list[Path]

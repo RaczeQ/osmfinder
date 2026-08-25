@@ -20,14 +20,11 @@ from osmfinder.finder import (
     OsmExtractSourceLike,
     display_available_extracts,
     download,
-    download_extract_by_query,
-    download_extracts_pbf_files,
     find,
-    find_and_download_extracts_pbf_files,
+    find_extract_by_query,
+    find_extracts_by_geometry,
     find_extracts_covering_point,
-    find_smallest_containing_extracts,
     get_available_extracts,
-    get_extract_by_query,
 )
 
 __version__ = "1.0.1"
@@ -43,12 +40,9 @@ __all__ = [
     "clear_osm_index_cache",
     "display_available_extracts",
     "download",
-    "download_extract_by_query",
-    "download_extracts_pbf_files",
     "find",
-    "find_and_download_extracts_pbf_files",
+    "find_extract_by_query",
+    "find_extracts_by_geometry",
     "find_extracts_covering_point",
-    "find_smallest_containing_extracts",
     "get_available_extracts",
-    "get_extract_by_query",
 ]
