@@ -7,7 +7,7 @@ import numpy as np
 import shapely
 from shapely.geometry.base import BaseGeometry
 
-EARTH_RADIUS_M = 6_371_008.8  # IUGG mean radius — swap for whatever sphere you want
+EARTH_RADIUS_M = 6_371_008.8  # IUGG mean radius
 
 
 @overload
