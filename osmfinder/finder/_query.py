@@ -1,11 +1,10 @@
 """
 Public find/query operations.
 
-Iterators for finding OSM extracts by a text query, a geometry or a point. These
-public functions are the entry points patched by tests and callers through the
-package :mod:`osmfinder.finder` namespace, so any patch-sensitive helper they
-depend on is resolved through ``_finder`` (the package module object) rather than
-a local import binding.
+Iterators for finding OSM extracts by a text query. These public functions are the
+entry points patched by tests and callers through the package :mod:`osmfinder.finder`
+namespace, so any patch-sensitive helper they depend on is resolved through ``_finder``
+(the package module object) rather than a local import binding.
 """
 
 import difflib
@@ -13,8 +12,6 @@ import warnings
 from typing import overload
 
 import numpy as np
-from shapely import intersects, unary_union
-from shapely.geometry import Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
 import osmfinder.finder as _finder
@@ -25,14 +22,13 @@ from osmfinder._results import (
 from osmfinder._typing import (
     OpenStreetMapExtract,
     OsmExtractSourceLike,
-    _calculate_geodetic_area,
 )
 from osmfinder.exceptions import (
     OsmExtractMultipleMatchesError,
     OsmExtractMultipleMatchesWarning,
     OsmExtractZeroMatchesError,
 )
-from osmfinder.finder._covering import _find_smallest_containing_extracts
+from osmfinder.finder._covering import find_extracts_by_geometry
 
 
 @overload
@@ -214,208 +210,6 @@ def find_extract_by_query(
 
     except ValueError as ex:
         raise ValueError(f"Unknown OSM extracts source: {source}.") from ex
-
-
-def find_extracts_by_geometry(
-    geometry: BaseGeometry,
-    source: OsmExtractSourceLike | None = None,
-    geometry_coverage_iou_threshold: float = 0.01,
-    allow_uncovered_geometry: bool = False,
-    excluded_extracts_ids: set[str] | None = None,
-    force_single_result: bool = False,
-    single_result_iou_threshold: float = 0.99,
-) -> OsmfinderGeometryResult:
-    """
-    Find smallest extracts from a given OSM source that contains given polygon.
-
-    Iterates an OSM source index and finds smallest extracts that covers a given geometry.
-
-    Extracts are selected based on the highest value of the Intersection over Union metric with
-    geometry. Some extracts might be discarded because of low IoU metric value leaving some parts
-    of the geometry uncovered.
-
-    Args:
-        geometry (BaseGeometry): Geometry to be covered.
-        source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
-            'BBBike', 'osmfr', or an iterable / comma-separated string of those
-            (e.g. ['BBBike', 'osmfr'] or 'bbbike,osmfr'). Defaults to 'any'.
-        geometry_coverage_iou_threshold (float): Minimal value of the Intersection over Union metric
-            for selecting the matching OSM extracts. Is best matching extract has value lower than
-            the threshold, it is discarded (except the first one). Has to be in range between
-            0 and 1. Value of 0 will allow every intersected extract, value of 1 will only allow
-            extracts that match the geometry exactly. Defaults to 0.01.
-        allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
-            by any OSM extract. Defaults to `False`.
-        excluded_extracts_ids (set[str] | None): Set of extract ids to exclude from the search.
-            Useful for skipping extracts that are unavailable for download. Defaults to `None`.
-        force_single_result (bool): When ``True``, return only the smallest extract that best covers
-            the geometry. If ``allow_uncovered_geometry`` is ``False``, the smallest fully
-            containing extract is returned. If ``allow_uncovered_geometry`` is ``True``, the
-            extract with the highest IoU above ``single_result_iou_threshold`` is returned.
-            If no candidate meets the threshold, the smallest fully containing extract is used as
-            a fallback.
-            Defaults to ``False``.
-        single_result_iou_threshold (float): Minimal IoU value for selecting a single result when
-            ``force_single_result`` is ``True`` and ``allow_uncovered_geometry`` is ``True``.
-            Defaults to 0.99.
-
-    Returns:
-        OsmfinderGeometryResult: Result containing extracts name, URL to download it
-        and boundary polygon.
-
-    Examples:
-        >>> import osmfinder
-        >>> from shapely.geometry import box
-        >>> geom = box(7.40, 43.71, 7.44, 43.75)
-        >>> results = osmfinder.find_extracts_by_geometry(geom, source="Geofabrik")
-        >>> len(results.extracts) >= 1
-        True
-        >>> results.extracts[0].id
-        'Geofabrik_monaco'
-    """
-    try:
-        index = _finder._get_index_for_sources(source)
-    except ValueError as ex:
-        raise ValueError(f"Unknown OSM extracts source: {source}.") from ex
-
-    extracts, steps = _find_smallest_containing_extracts(
-        geometry=geometry,
-        polygons_index=index,
-        geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-        allow_uncovered_geometry=allow_uncovered_geometry,
-        excluded_extracts_ids=excluded_extracts_ids,
-        force_single_result=force_single_result,
-        single_result_iou_threshold=single_result_iou_threshold,
-    )
-
-    final_ids = {e.id for e in extracts}
-    for step in steps:
-        if step.selected and step.extract.id not in final_ids:
-            step.selected = False
-            step.reason = "redundant"
-
-    cumulative_union = Polygon()
-    input_area = _calculate_geodetic_area(geometry)
-    last_coverage = 0.0
-    for step in steps:
-        if step.selected:
-            cumulative_union = unary_union([cumulative_union, step.extract.geometry])
-            covered_area = _calculate_geodetic_area(cumulative_union.intersection(geometry))
-            if input_area > 0:
-                last_coverage = min(1.0, covered_area / input_area)
-            else:
-                last_coverage = 1.0 if covered_area == 0 else 0.0
-
-        step.cumulative_coverage = last_coverage
-
-    covered_geometry = (
-        unary_union([e.geometry for e in extracts]).intersection(geometry)
-        if extracts
-        else Polygon()
-    )
-    uncovered_geometry = geometry.difference(covered_geometry)
-
-    sources_used = _finder._resolve_extract_sources(source)
-
-    return OsmfinderGeometryResult(
-        extracts=extracts,
-        sources_used=sources_used,
-        input_geometry=geometry,
-        covered_geometry=covered_geometry,
-        uncovered_geometry=uncovered_geometry,
-        steps=steps,
-        config={
-            "geometry_coverage_iou_threshold": geometry_coverage_iou_threshold,
-            "allow_uncovered_geometry": allow_uncovered_geometry,
-            "force_single_result": force_single_result,
-            "single_result_iou_threshold": single_result_iou_threshold,
-            "excluded_extracts_ids": list(excluded_extracts_ids) if excluded_extracts_ids else [],
-        },
-    )
-
-
-@overload
-def find_extracts_covering_point(
-    point: tuple[float, float],
-    source: OsmExtractSourceLike | None = None,
-    *,
-    excluded_extracts_ids: set[str] | None = None,
-) -> list[OpenStreetMapExtract]: ...
-
-
-@overload
-def find_extracts_covering_point(
-    point: Point,
-    source: OsmExtractSourceLike | None = None,
-    *,
-    excluded_extracts_ids: set[str] | None = None,
-) -> list[OpenStreetMapExtract]: ...
-
-
-def find_extracts_covering_point(
-    point: tuple[float, float] | Point,
-    source: OsmExtractSourceLike | None = None,
-    *,
-    excluded_extracts_ids: set[str] | None = None,
-) -> list[OpenStreetMapExtract]:
-    """
-    Find all extracts that contain a specific point.
-
-    Args:
-        point (tuple[float, float] | Point): A ``(lon, lat)`` coordinate tuple
-            or a shapely ``Point`` geometry. The tuple follows the ``(x, y)`` convention
-            used by GeoJSON and shapely, i.e. longitude first, latitude second.
-        source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
-            'BBBike', 'osmfr', or an iterable / comma-separated string of those
-            (e.g. ['BBBike', 'osmfr'] or 'bbbike,osmfr'). Defaults to 'any'.
-        excluded_extracts_ids (set[str] | None): Set of extract ids to exclude from the search.
-            Useful for skipping extracts that are unavailable for download. Defaults to `None`.
-
-    Returns:
-        list[OpenStreetMapExtract]: List of extracts covering the point, sorted by area
-            from smallest to biggest. Returns an empty list if no extract covers the point.
-
-    Examples:
-        >>> import osmfinder
-        >>> # Query by (lon, lat) tuple
-        >>> extracts = osmfinder.find_extracts_covering_point(
-        ...     (7.42, 43.73), source="Geofabrik"
-        ... )
-        >>> len(extracts) >= 1
-        True
-        >>> extracts[0].id
-        'Geofabrik_monaco'
-        >>> # Query by shapely Point
-        >>> from shapely.geometry import Point
-        >>> extracts = osmfinder.find_extracts_covering_point(
-        ...     Point(7.42, 43.73), source="Geofabrik"
-        ... )
-        >>> len(extracts) >= 1
-        True
-    """
-    if isinstance(point, tuple):
-        lon, lat = point
-        point_geom = Point(lon, lat)
-    else:
-        point_geom = point
-
-    try:
-        index = _finder._get_index_for_sources(source)
-    except ValueError as ex:
-        raise ValueError(f"Unknown OSM extracts source: {source}.") from ex
-
-    if excluded_extracts_ids:
-        index = index.filter_by_mask(~np.isin(index.ids, list(excluded_extracts_ids)))
-
-    candidate_indices = index.tree.query(point_geom)
-
-    matching: list[tuple[float, int]] = []
-    for idx in candidate_indices:
-        if intersects(index.geometries[idx], point_geom):
-            matching.append((index.areas[idx], idx))
-
-    matching.sort(key=lambda item: (item[0], str(index.ids[item[1]])))
-    return [index.get_extract_by_index(idx) for _, idx in matching]
 
 
 @overload

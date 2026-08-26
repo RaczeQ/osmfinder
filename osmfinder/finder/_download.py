@@ -34,7 +34,8 @@ from osmfinder.exceptions import (
     OsmExtractUnavailableWarning,
     OsmExtractZeroMatchesError,
 )
-from osmfinder.finder._query import find_extract_by_query, find_extracts_by_geometry
+from osmfinder.finder._covering import find_extracts_by_geometry
+from osmfinder.finder._query import find_extract_by_query
 
 
 def _download_single_extract(

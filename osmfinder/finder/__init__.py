@@ -7,11 +7,11 @@ repositories.
 The public API (``download``, ``find``, ``find_extract_by_query`` …) and the patch-sensitive
 helpers (``_get_index_for_sources``, ``_resolve_extract_sources``,
 ``OSM_EXTRACT_SOURCE_INDEX_FUNCTION``, ``_download_single_extract``) live in this package
-namespace. The remaining logic is split into domain submodules: ``_covering`` (the pure
-geometry-covering algorithm), ``_query`` (find by name/geometry/point), ``_listing``
-(list/display available extracts) and ``_download`` (downloads). Submodules resolve the
-patch-sensitive helpers through this package module at call time, which keeps the
-``osmfinder.finder.<name>`` monkeypatching/patching used by the test-suite effective.
+namespace. The remaining logic is split into domain submodules: ``_covering`` (geometry-based
+find operations), ``_query`` (find by name), ``_listing`` (list/display available extracts)
+and ``_download`` (downloads). Submodules resolve the patch-sensitive helpers through this
+package module at call time, which keeps the ``osmfinder.finder.<name>`` monkeypatching/patching
+used by the test-suite effective.
 """
 
 import importlib
@@ -31,6 +31,10 @@ from osmfinder.extract import (
     _get_registered_index,
     clear_osm_index_cache,
 )
+from osmfinder.finder._covering import (
+    find_extracts_by_geometry,
+    find_extracts_covering_point,
+)
 from osmfinder.finder._download import (
     _download_single_extract as _download_single_extract,
 )
@@ -44,8 +48,6 @@ from osmfinder.finder._listing import (
 from osmfinder.finder._query import (
     find,
     find_extract_by_query,
-    find_extracts_by_geometry,
-    find_extracts_covering_point,
 )
 
 # Importing the sources package has the side effect of registering every OSM extract
