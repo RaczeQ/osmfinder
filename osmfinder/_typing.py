@@ -1,10 +1,12 @@
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 from shapely import STRtree, is_valid, make_valid
+
+from osmfinder._area_helper import calculate_spherical_area
 
 if TYPE_CHECKING:  # pragma: no cover
     from shapely.geometry.base import BaseGeometry
@@ -106,7 +108,7 @@ class OsmExtractsIndex:
         geometries = _ensure_valid_geometries(geometries)
 
         # Calculate geodetic areas (km²).
-        areas = np.array([_calculate_geodetic_area(geometry) for geometry in geometries])
+        areas = calculate_spherical_area(geometries)
 
         # Generate full file names from the parent hierarchy.
         file_names = _generate_file_names(ids, names, parents)
@@ -220,16 +222,6 @@ def _ensure_valid_geometries(geometries: np.ndarray) -> np.ndarray:
         fixed_geometries[invalid_geometries_mask] = make_valid(geometries[invalid_geometries_mask])
         return fixed_geometries
     return geometries
-
-
-def _calculate_geodetic_area(geometry: "BaseGeometry") -> float:
-    from pyproj import Geod
-    from shapely.ops import orient
-
-    geod = Geod(ellps="WGS84")
-    poly_area_m2, _ = geod.geometry_area_perimeter(orient(geometry, sign=1))
-    poly_area_km2 = round(poly_area_m2) / 1_000_000
-    return cast("float", poly_area_km2)
 
 
 def _generate_file_names(ids: np.ndarray, names: np.ndarray, parents: np.ndarray) -> np.ndarray:

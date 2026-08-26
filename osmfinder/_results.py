@@ -181,7 +181,7 @@ class OsmfinderGeometryResult(OsmfinderResult):
             f"  extracts:\n{extracts_lines}\n"
             f"  coverage: {coverage_pct:.1f}%\n"
             f"  iou threshold: {self.iou_threshold}\n"
-            f"  steps:\n{steps_lines}\n"
+            f"  steps ({len(self.steps)}):\n{steps_lines}\n"
             f"  sources used: {_format_sources(self.sources_used)}"
         )
 
