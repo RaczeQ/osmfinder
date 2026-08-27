@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import requests
-
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
+from osmfinder._network import get_with_retries
 
 if TYPE_CHECKING:  # pragma: no cover
     from shapely.geometry.base import BaseGeometry
@@ -25,7 +24,7 @@ def parse_geojson_file(geojson_url: str) -> BaseGeometry | None:  # pragma: no c
         BaseGeometry | None: Parsed geometry, or `None` if the request returns 404 not found
             or the file contains no geometry.
     """
-    result = requests.get(
+    result = get_with_retries(
         geojson_url,
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,

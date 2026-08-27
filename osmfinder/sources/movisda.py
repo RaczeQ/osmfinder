@@ -10,9 +10,8 @@ For both, a single GeoJSON file describes all available extracts and their geome
 
 from typing import Any
 
-import requests
-
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
+from osmfinder._network import get_with_retries
 from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.extract import load_index_decorator
 
@@ -71,7 +70,7 @@ def _iterate_movisda_geojson(
     Returns:
         list[OpenStreetMapExtract]: List of parsed extracts.
     """
-    result = requests.get(
+    result = get_with_retries(
         geojson_url,
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,

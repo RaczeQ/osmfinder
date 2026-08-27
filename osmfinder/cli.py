@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from osmfinder._area_helper import calculate_spherical_area
 from osmfinder._typing import OsmExtractSource
 from osmfinder.exceptions import (
     OsmExtractMultipleMatchesError,
@@ -113,9 +114,13 @@ def list_cmd(
 
 def _print_query_table(matched_extracts: list[Any], extracts: list[Any], query: str) -> None:
     """Print a Rich table of matched extracts, highlighting selected ones."""
-    from osmfinder._typing import _calculate_geodetic_area
-
-    extract_areas = {e.id: _calculate_geodetic_area(e.geometry) for e in matched_extracts}
+    extract_areas = dict(
+        zip(
+            [e.id for e in matched_extracts],
+            calculate_spherical_area([e.geometry for e in matched_extracts]),
+            strict=True,
+        )
+    )
     matched_extracts = sorted(
         matched_extracts,
         key=lambda e: (extract_areas[e.id], e.id),
@@ -221,12 +226,10 @@ def _print_geometry_result(result: OsmfinderGeometryResult) -> None:
     table.add_column("Status", style="bold")
     table.add_column("Reason", style="dim")
 
-    from osmfinder._typing import _calculate_geodetic_area
-
     id_max = _get_id_max_length()
     row_idx = 1
     for step in result.steps:
-        area = _calculate_geodetic_area(step.extract.geometry)
+        area = calculate_spherical_area(step.extract.geometry)
         table.add_row(
             str(row_idx),
             _truncate_middle(step.extract.id, max_length=id_max),
@@ -246,8 +249,8 @@ def _print_geometry_result(result: OsmfinderGeometryResult) -> None:
     console = Console()
     console.print(table)
 
-    input_area = _calculate_geodetic_area(result.input_geometry)
-    covered_area = _calculate_geodetic_area(
+    input_area = calculate_spherical_area(result.input_geometry)
+    covered_area = calculate_spherical_area(
         result.covered_geometry.intersection(result.input_geometry)
     )
     coverage_pct = min(100.0, (covered_area / input_area) * 100) if input_area > 0 else 100.0

@@ -87,7 +87,7 @@ def get_available_extracts(
         >>> len(extracts) >= 1
         True
         >>> [e.id for e in extracts[:3]]
-        ['Geofabrik_antarctica', 'Geofabrik_melilla', 'Geofabrik_ceuta']
+        ['Geofabrik_melilla', 'Geofabrik_ceuta', 'Geofabrik_enfield']
     """
     try:
         index = _finder._get_index_for_sources(source)

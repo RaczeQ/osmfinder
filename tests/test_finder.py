@@ -412,7 +412,7 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
         }
         return response
 
-    mocker.patch("osmfinder.parsers.geojson.requests.get", side_effect=fake_get)
+    mocker.patch("osmfinder._network.requests.get", side_effect=fake_get)
     geojson_parser_module.parse_geojson_file("http://example.com/extent.geojson")
 
     assert captured_kwargs.get("timeout") == OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS
@@ -566,9 +566,9 @@ def test_geometry_covering_step_reasons() -> None:
 
     reasons = {step.extract.id: (step.selected, step.reason) for step in result.steps}
     assert reasons["GEO2Day_europe_austria_vorarlberg"] == (True, "first_extract")
-    assert reasons["GEO2Day_europe_switzerland_saint_gallen"] == (True, "selected")
+    assert reasons["osmfr_europe_switzerland_saint_gallen"] == (True, "selected")
     assert reasons["Movisda-admin_LI"] == (True, "selected")
-    assert reasons["GEO2Day_europe_switzerland_thurgau"] == (False, "redundant")
+    assert reasons["osmfr_europe_switzerland_thurgau"] == (False, "redundant")
     assert reasons["BBBike_Konstanz"] == (True, "selected")
 
 

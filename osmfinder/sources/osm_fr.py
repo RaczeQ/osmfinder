@@ -7,11 +7,11 @@ This module contains wrapper for publically available OpenStreetMap.fr download 
 import re
 from typing import Any
 
-import requests
 from tqdm import tqdm
 
 from osmfinder._compat import FORCE_TERMINAL
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
+from osmfinder._network import get_with_retries
 from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.extract import load_index_decorator
 from osmfinder.parsers.poly import parse_polygon_file
@@ -62,7 +62,7 @@ def _gather_all_openstreetmap_fr_urls(
     pbar.set_description_str(id_prefix)
     extract_soup_objects = []
 
-    result = requests.get(
+    result = get_with_retries(
         f"{OPENSTREETMAP_FR_EXTRACTS_INDEX_URL}{directory_url}",
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,

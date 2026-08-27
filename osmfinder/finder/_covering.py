@@ -16,19 +16,19 @@ from multiprocessing import cpu_count
 from typing import cast
 
 import numpy as np
-from shapely import equals_exact, intersects, is_empty, unary_union
+from shapely import equals_exact, intersection, intersects, is_empty, unary_union
 from shapely.geometry import Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from tqdm.contrib.concurrent import process_map
 
 import osmfinder.finder as _finder
+from osmfinder._area_helper import calculate_spherical_area
 from osmfinder._compat import FORCE_TERMINAL
 from osmfinder._results import GeometryCoveringStep, OsmfinderGeometryResult
 from osmfinder._typing import (
     OpenStreetMapExtract,
     OsmExtractsIndex,
     OsmExtractSourceLike,
-    _calculate_geodetic_area,
 )
 from osmfinder.exceptions import (
     GeometryNotCoveredError,
@@ -205,71 +205,123 @@ def _find_smallest_containing_extracts_for_single_geometry(
     if geometry_coverage_iou_threshold < 0 or geometry_coverage_iou_threshold > 1:
         raise ValueError("geometry_coverage_iou_threshold is outside required bounds [0, 1]")
 
-    checked_extracts_ids, iou_metric_values = _cover_geometry_with_extracts(
-        geometry=geometry,
-        polygons_index=polygons_index,
-        allow_uncovered_geometry=allow_uncovered_geometry,
-    )
-
-    selected_extracts_ids, steps = _select_covering_extracts(
-        checked_extracts_ids=checked_extracts_ids,
-        iou_metric_values=iou_metric_values,
-        polygons_index=polygons_index,
-        input_geometry=geometry,
-        geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-    )
-    return selected_extracts_ids, steps
-
-
-def _select_covering_extracts(
-    checked_extracts_ids: list[str],
-    iou_metric_values: list[float],
-    polygons_index: OsmExtractsIndex,
-    input_geometry: BaseGeometry,
-    geometry_coverage_iou_threshold: float = 0.01,
-) -> tuple[set[str], list[GeometryCoveringStep]]:
-    """Select extracts based on IoU threshold and return selection steps."""
     selected_extracts_ids: set[str] = set()
+    checked_extracts_ids: set[str] = set()
     steps: list[GeometryCoveringStep] = []
-    geometry_to_cover = input_geometry
 
-    for extract_id, iou_metric_value in zip(checked_extracts_ids, iou_metric_values, strict=True):
-        extract = _get_extract_by_id(polygons_index, extract_id)
-        intersection_geometry = extract.geometry.intersection(geometry_to_cover)
+    if geometry.geom_type == "Polygon":
+        geometry_to_cover = cast("BaseGeometry", geometry.buffer(0))
+    else:
+        geometry_to_cover = cast("BaseGeometry", geometry.buffer(1e-6))
 
-        if iou_metric_value >= geometry_coverage_iou_threshold or not selected_extracts_ids:
-            reason = "first_extract" if not selected_extracts_ids else "selected"
-            selected_extracts_ids.add(extract_id)
-            steps.append(
-                GeometryCoveringStep(
-                    extract=extract,
-                    iou=iou_metric_value,
-                    selected=True,
-                    reason=reason,
-                    geometry_to_cover=geometry_to_cover,
-                    intersection_geometry=intersection_geometry,
-                )
+    exactly_matching_mask = equals_exact(polygons_index.geometries, geometry, tolerance=1e-6)
+    if np.count_nonzero(exactly_matching_mask) == 1:
+        matching_idx = int(np.flatnonzero(exactly_matching_mask)[0])
+        extract_id = str(polygons_index.ids[matching_idx])
+        extract = polygons_index.get_extract_by_index(matching_idx)
+        selected_extracts_ids.add(extract_id)
+        steps.append(
+            GeometryCoveringStep(
+                extract=extract,
+                iou=1.0,
+                selected=True,
+                reason="first_extract",
+                geometry_to_cover=geometry_to_cover,
+                intersection_geometry=geometry_to_cover,
             )
-            geometry_to_cover = geometry_to_cover.difference(extract.geometry)
-        else:
+        )
+        return selected_extracts_ids, steps
+
+    ids = polygons_index.ids
+    areas = polygons_index.areas
+
+    while not is_empty(geometry_to_cover):
+        candidate_indices = polygons_index.tree.query(geometry_to_cover, predicate="intersects")
+        candidate_indices = [
+            idx for idx in candidate_indices if str(ids[idx]) not in checked_extracts_ids
+        ]
+
+        if not candidate_indices:
+            if not allow_uncovered_geometry:
+                raise GeometryNotCoveredError(
+                    "Couldn't find extracts covering given geometry."
+                    " If it's expected behaviour, you can suppress this error by passing"
+                    " the `allow_uncovered_geometry=True` argument"
+                    " or add `--allow-uncovered-geometry` flag to the CLI command."
+                )
             warnings.warn(
-                (
-                    "Skipping extract because of low IoU value "
-                    f"({extract.file_name}, {iou_metric_value:.3g})."
-                ),
+                "Couldn't find extracts covering given geometry.",
                 GeometryNotCoveredWarning,
                 stacklevel=0,
             )
+            break
+
+        candidate_sort_areas = np.array([float(areas[idx]) for idx in candidate_indices])
+        candidate_sort_ids = np.array([str(ids[idx]) for idx in candidate_indices])
+        candidate_order = np.lexsort((candidate_sort_ids, candidate_sort_areas))
+        candidate_indices = [candidate_indices[i] for i in candidate_order]
+
+        candidate_geometries = np.array(
+            [polygons_index.geometries[idx] for idx in candidate_indices], dtype=object
+        )
+        candidate_areas = calculate_spherical_area(candidate_geometries)
+        geometry_to_cover_area = calculate_spherical_area(geometry_to_cover)
+        intersection_geometries = intersection(candidate_geometries, geometry_to_cover)
+        intersection_areas = calculate_spherical_area(intersection_geometries)
+        iou_values = intersection_areas / (
+            candidate_areas + geometry_to_cover_area - intersection_areas
+        )
+
+        best_pos = int(np.lexsort((candidate_areas, -iou_values))[0])
+        best_idx = candidate_indices[best_pos]
+        best_iou = float(iou_values[best_pos])
+
+        if best_iou >= geometry_coverage_iou_threshold or not selected_extracts_ids:
+            reason = "first_extract" if not selected_extracts_ids else "selected"
+            selected_extracts_ids.add(str(ids[best_idx]))
+            checked_extracts_ids.add(str(ids[best_idx]))
+            extract = polygons_index.get_extract_by_index(best_idx)
             steps.append(
                 GeometryCoveringStep(
                     extract=extract,
-                    iou=iou_metric_value,
-                    selected=False,
-                    reason="low_iou",
+                    iou=best_iou,
+                    selected=True,
+                    reason=reason,
                     geometry_to_cover=geometry_to_cover,
-                    intersection_geometry=intersection_geometry,
+                    intersection_geometry=intersection_geometries[best_pos],
                 )
             )
+            geometry_to_cover = geometry_to_cover.difference(polygons_index.geometries[best_idx])
+        else:
+            # Sort discarded candidates by IoU (desc), then area (asc), then id (asc)
+            discard_order = np.lexsort(
+                (
+                    np.array([str(ids[idx]) for idx in candidate_indices]),
+                    candidate_areas,
+                    -iou_values,
+                )
+            )
+            for i in discard_order:
+                idx = candidate_indices[i]
+                checked_extracts_ids.add(str(ids[idx]))
+                extract = polygons_index.get_extract_by_index(idx)
+                steps.append(
+                    GeometryCoveringStep(
+                        extract=extract,
+                        iou=float(iou_values[i]),
+                        selected=False,
+                        reason="low_iou",
+                        geometry_to_cover=geometry_to_cover,
+                        intersection_geometry=intersection_geometries[i],
+                    )
+                )
+            warnings.warn(
+                f"Discarded {len(candidate_indices)} extracts with IoU below the "
+                f"threshold of {geometry_coverage_iou_threshold:.3g}.",
+                GeometryNotCoveredWarning,
+                stacklevel=0,
+            )
+            break
 
     return selected_extracts_ids, steps
 
@@ -281,17 +333,12 @@ def _find_single_extract_for_geometry(
     allow_uncovered_geometry: bool = False,
 ) -> tuple[str, GeometryCoveringStep]:
     """Find a single extract that best covers the given geometry."""
-    candidate_indices = polygons_index.tree.query(geometry)
-    candidate_indices = [
-        idx
-        for idx in candidate_indices
-        if intersects(cast("BaseGeometry", polygons_index.geometries[idx]), geometry)
-    ]
+    candidate_indices = polygons_index.tree.query(geometry, predicate="intersects")
 
-    if not candidate_indices:
+    if len(candidate_indices) == 0:
         raise GeometryNotCoveredError("No OSM extracts intersect the query geometry.")
 
-    geometry_area = _calculate_geodetic_area(geometry)
+    geometry_area = calculate_spherical_area(geometry)
 
     complete_cover_candidates: list[tuple[int, float, float]] = []
     partial_candidates: list[tuple[int, float, float]] = []
@@ -305,7 +352,7 @@ def _find_single_extract_for_geometry(
             complete_cover_candidates.append((int(idx), extract_area, iou))
         else:
             intersection_geometry = extract_geometry.intersection(geometry)
-            intersection_area = _calculate_geodetic_area(intersection_geometry)
+            intersection_area = calculate_spherical_area(intersection_geometry)
             iou = intersection_area / (extract_area + geometry_area - intersection_area)
             partial_candidates.append((int(idx), extract_area, iou))
 
@@ -370,115 +417,6 @@ def _get_extract_by_id(index: OsmExtractsIndex, extract_id: str) -> OpenStreetMa
     """Return the extract with the given id from the index."""
     matching_indices = np.flatnonzero(index.ids == extract_id)
     return index.get_extract_by_index(int(matching_indices[0]))
-
-
-def _cover_geometry_with_extracts(
-    geometry: BaseGeometry,
-    polygons_index: OsmExtractsIndex,
-    allow_uncovered_geometry: bool = False,
-) -> tuple[list[str], list[float]]:
-    """
-    Intersect a geometry with extracts and return the IoU coverage.
-
-    Args:
-        geometry (BaseGeometry): Geometry to be covered.
-        polygons_index (OsmExtractsIndex): Index of available extracts.
-        allow_uncovered_geometry (bool): Suppress an error if some geometry parts aren't covered
-            by any OSM extract. Defaults to `False`.
-
-    Raises:
-        RuntimeError: If provided extracts index is empty.
-        RuntimeError: If there is no extracts covering a given geometry (singularly or in group).
-
-    Returns:
-        tuple[list[str], list[float]]: List of extracts index string values with a list
-            of IoU metric values.
-    """
-    if polygons_index is None:
-        raise RuntimeError("Extracts index is empty.")
-
-    checked_extracts_ids: list[str] = []
-    iou_metric_values: list[float] = []
-
-    if geometry.geom_type == "Polygon":
-        geometry_to_cover = cast("BaseGeometry", geometry.buffer(0))
-    else:
-        geometry_to_cover = cast("BaseGeometry", geometry.buffer(1e-6))
-
-    exactly_matching_mask = np.array(
-        [
-            equals_exact(extract_geometry, geometry, tolerance=1e-6)
-            for extract_geometry in polygons_index.geometries
-        ]
-    )
-    if np.count_nonzero(exactly_matching_mask) == 1:
-        matching_idx = int(np.flatnonzero(exactly_matching_mask)[0])
-        checked_extracts_ids.append(str(polygons_index.ids[matching_idx]))
-        iou_metric_values.append(1.0)
-        return checked_extracts_ids, iou_metric_values
-
-    while not is_empty(geometry_to_cover):
-        # Find candidate extracts that intersect the remaining geometry.
-        candidate_indices = polygons_index.tree.query(geometry_to_cover)
-        candidate_indices = [
-            idx
-            for idx in candidate_indices
-            if str(polygons_index.ids[idx]) not in checked_extracts_ids
-            and intersects(cast("BaseGeometry", polygons_index.geometries[idx]), geometry_to_cover)
-        ]
-
-        # Sort candidates deterministically by area then id so that
-        # np.lexsort tiebreaking is stable across platforms/processes.
-        candidate_sort_areas = np.array(
-            [float(polygons_index.areas[idx]) for idx in candidate_indices]
-        )
-        candidate_sort_ids = np.array([str(polygons_index.ids[idx]) for idx in candidate_indices])
-        candidate_order = np.lexsort((candidate_sort_ids, candidate_sort_areas))
-        candidate_indices = [candidate_indices[i] for i in candidate_order]
-
-        if not candidate_indices:
-            if not allow_uncovered_geometry:
-                raise GeometryNotCoveredError(
-                    "Couldn't find extracts covering given geometry."
-                    " If it's expected behaviour, you can suppress this error by passing"
-                    " the `allow_uncovered_geometry=True` argument"
-                    " or add `--allow-uncovered-geometry` flag to the CLI command."
-                )
-            warnings.warn(
-                "Couldn't find extracts covering given geometry.",
-                GeometryNotCoveredWarning,
-                stacklevel=0,
-            )
-            break
-
-        # Compute IoU for each candidate.
-        candidate_geometries = [
-            cast("BaseGeometry", polygons_index.geometries[idx]) for idx in candidate_indices
-        ]
-        candidate_areas = np.array(
-            [_calculate_geodetic_area(geometry) for geometry in candidate_geometries]
-        )
-        geometry_to_cover_area = _calculate_geodetic_area(geometry_to_cover)
-        intersection_areas = np.array(
-            [
-                _calculate_geodetic_area(extract_geometry.intersection(geometry_to_cover))
-                for extract_geometry in candidate_geometries
-            ]
-        )
-        iou_values = intersection_areas / (
-            candidate_areas + geometry_to_cover_area - intersection_areas
-        )
-
-        # Select the best matching extract (highest IoU, then smallest area).
-        best_candidate_pos = int(np.lexsort((candidate_areas, -iou_values))[0])
-        best_idx = candidate_indices[best_candidate_pos]
-        best_iou = iou_values[best_candidate_pos]
-
-        geometry_to_cover = geometry_to_cover.difference(candidate_geometries[best_candidate_pos])
-        checked_extracts_ids.append(str(polygons_index.ids[best_idx]))
-        iou_metric_values.append(float(best_iou))
-
-    return checked_extracts_ids, iou_metric_values
 
 
 def _filter_extracts(
@@ -732,12 +670,12 @@ def find_extracts_by_geometry(
             step.reason = "redundant"
 
     cumulative_union = Polygon()
-    input_area = _calculate_geodetic_area(geometry)
+    input_area = calculate_spherical_area(geometry)
     last_coverage = 0.0
     for step in steps:
         if step.selected:
             cumulative_union = unary_union([cumulative_union, step.extract.geometry])
-            covered_area = _calculate_geodetic_area(cumulative_union.intersection(geometry))
+            covered_area = calculate_spherical_area(cumulative_union.intersection(geometry))
             if input_area > 0:
                 last_coverage = min(1.0, covered_area / input_area)
             else:
@@ -826,7 +764,7 @@ def find_extracts_covering_point(
     if excluded_extracts_ids:
         index = index.filter_by_mask(~np.isin(index.ids, list(excluded_extracts_ids)))
 
-    candidate_indices = index.tree.query(point_geom)
+    candidate_indices = index.tree.query(point_geom, predicate="intersects")
 
     matching: list[tuple[float, int]] = []
     for idx in candidate_indices:

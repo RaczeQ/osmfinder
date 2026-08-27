@@ -144,7 +144,7 @@ def test_geometry_repr_basic() -> None:
     assert "a — Alpha" in repr_str
     assert "coverage: 100.0%" in repr_str
     assert "iou threshold: 0.01" in repr_str
-    assert "steps:" in repr_str
+    assert "steps (1):" in repr_str
     assert "iou: 0.8500, selected, selected" in repr_str
     assert "sources used: Geofabrik" in repr_str
 
@@ -162,7 +162,7 @@ def test_geometry_repr_empty_extracts_and_steps() -> None:
     )
     repr_str = repr(result)
     assert "extracts:\n    none" in repr_str
-    assert "steps:\n    none" in repr_str
+    assert "steps (0):\n    none" in repr_str
     assert "coverage: 0.0%" in repr_str
 
 
