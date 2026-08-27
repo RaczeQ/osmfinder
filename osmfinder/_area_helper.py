@@ -34,17 +34,17 @@ def calculate_spherical_area(
     geometries = np.atleast_1d(np.asarray(geometry, dtype=object))
 
     if len(geometries) == 0:
-        return np.array([], dtype=float)
+        return 0.0 if is_single else np.array([], dtype=float)
 
     parts, part_idx = shapely.get_parts(geometries, return_index=True)
 
     if len(parts) == 0:
-        return np.zeros(len(geometries), dtype=float)
+        return 0.0 if is_single else np.zeros(len(geometries), dtype=float)
 
     rings, ring_part_idx = shapely.get_rings(parts, return_index=True)
 
     if len(rings) == 0:
-        return np.zeros(len(geometries), dtype=float)
+        return 0.0 if is_single else np.zeros(len(geometries), dtype=float)
 
     is_exterior = np.empty(len(ring_part_idx), dtype=bool)
     is_exterior[0] = True

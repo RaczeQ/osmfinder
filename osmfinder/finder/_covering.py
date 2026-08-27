@@ -206,7 +206,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
         raise ValueError("geometry_coverage_iou_threshold is outside required bounds [0, 1]")
 
     selected_extracts_ids: set[str] = set()
-    checked_extracts_ids: list[str] = []
+    checked_extracts_ids: set[str] = set()
     steps: list[GeometryCoveringStep] = []
 
     if geometry.geom_type == "Polygon":
@@ -241,11 +241,6 @@ def _find_smallest_containing_extracts_for_single_geometry(
             idx for idx in candidate_indices if str(ids[idx]) not in checked_extracts_ids
         ]
 
-        candidate_sort_areas = np.array([float(areas[idx]) for idx in candidate_indices])
-        candidate_sort_ids = np.array([str(ids[idx]) for idx in candidate_indices])
-        candidate_order = np.lexsort((candidate_sort_ids, candidate_sort_areas))
-        candidate_indices = [candidate_indices[i] for i in candidate_order]
-
         if not candidate_indices:
             if not allow_uncovered_geometry:
                 raise GeometryNotCoveredError(
@@ -260,6 +255,11 @@ def _find_smallest_containing_extracts_for_single_geometry(
                 stacklevel=0,
             )
             break
+
+        candidate_sort_areas = np.array([float(areas[idx]) for idx in candidate_indices])
+        candidate_sort_ids = np.array([str(ids[idx]) for idx in candidate_indices])
+        candidate_order = np.lexsort((candidate_sort_ids, candidate_sort_areas))
+        candidate_indices = [candidate_indices[i] for i in candidate_order]
 
         candidate_geometries = np.array(
             [polygons_index.geometries[idx] for idx in candidate_indices], dtype=object
@@ -279,7 +279,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
         if best_iou >= geometry_coverage_iou_threshold or not selected_extracts_ids:
             reason = "first_extract" if not selected_extracts_ids else "selected"
             selected_extracts_ids.add(str(ids[best_idx]))
-            checked_extracts_ids.append(str(ids[best_idx]))
+            checked_extracts_ids.add(str(ids[best_idx]))
             extract = polygons_index.get_extract_by_index(best_idx)
             steps.append(
                 GeometryCoveringStep(
@@ -303,7 +303,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
             )
             for i in discard_order:
                 idx = candidate_indices[i]
-                checked_extracts_ids.append(str(ids[idx]))
+                checked_extracts_ids.add(str(ids[idx]))
                 extract = polygons_index.get_extract_by_index(idx)
                 steps.append(
                     GeometryCoveringStep(
