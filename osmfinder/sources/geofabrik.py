@@ -31,6 +31,7 @@ def _load_geofabrik_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cove
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,
     )
+    result.raise_for_status()
     parsed_data = json.loads(result.text)
     extracts = _parse_geofabrik_index(parsed_data)
     return OsmExtractsIndex.from_extracts(extracts)

@@ -6,7 +6,6 @@ _RETRYABLE_EXCEPTIONS = (
     requests.ConnectionError,
     requests.Timeout,
     requests.TooManyRedirects,
-    requests.RequestException,
 )
 
 

@@ -1,7 +1,9 @@
 """Poly file parser function."""
 
+import warnings
 from typing import Any
 
+from requests.exceptions import HTTPError
 from shapely.geometry import MultiPolygon
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
@@ -26,9 +28,13 @@ def parse_polygon_file(polygon_url: str) -> MultiPolygon | None:  # pragma: no c
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,
     )
-    if result.status_code == 404:
-        return None
-    result.raise_for_status()
+    try:
+        result.raise_for_status()
+    except HTTPError as exc:
+        if exc.response.status_code == 404:
+            warnings.warn(f"Resource not found (404): {polygon_url}", UserWarning, stacklevel=2)
+            return None
+        raise
     poly = parse_poly(result.text.splitlines())
     return poly
 

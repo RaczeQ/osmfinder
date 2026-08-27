@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any
+
+from requests.exceptions import HTTPError
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
 from osmfinder._network import get_with_retries
@@ -29,9 +32,13 @@ def parse_geojson_file(geojson_url: str) -> BaseGeometry | None:  # pragma: no c
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,
     )
-    if result.status_code == 404:
-        return None
-    result.raise_for_status()
+    try:
+        result.raise_for_status()
+    except HTTPError as exc:
+        if exc.response.status_code == 404:
+            warnings.warn(f"Resource not found (404): {geojson_url}", UserWarning, stacklevel=2)
+            return None
+        raise
     return parse_geojson(result.json())
 
 

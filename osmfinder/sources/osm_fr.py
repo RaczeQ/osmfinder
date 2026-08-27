@@ -5,8 +5,10 @@ This module contains wrapper for publically available OpenStreetMap.fr download 
 """
 
 import re
+import warnings
 from typing import Any
 
+from requests.exceptions import HTTPError
 from tqdm import tqdm
 
 from osmfinder._compat import FORCE_TERMINAL
@@ -67,6 +69,17 @@ def _gather_all_openstreetmap_fr_urls(
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,
     )
+    try:
+        result.raise_for_status()
+    except HTTPError as exc:
+        if exc.response.status_code == 404:
+            warnings.warn(
+                f"Resource not found (404): {OPENSTREETMAP_FR_EXTRACTS_INDEX_URL}{directory_url}",
+                UserWarning,
+                stacklevel=2,
+            )
+            return []
+        raise
     soup = BeautifulSoup(result.text, "html.parser")
 
     extracts_urls = soup.find_all(string=re.compile("-latest\\.osm\\.pbf$"))

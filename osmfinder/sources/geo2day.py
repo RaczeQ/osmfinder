@@ -6,9 +6,11 @@ https://geo2day.com/).
 Each region is described by a GeoJSON boundary file.
 """
 
+import warnings
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+from requests.exceptions import HTTPError
 from tqdm import tqdm
 
 from osmfinder._compat import FORCE_TERMINAL
@@ -115,7 +117,13 @@ def _gather_all_geo2day_urls(
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,
     )
-    result.raise_for_status()
+    try:
+        result.raise_for_status()
+    except HTTPError as exc:
+        if exc.response.status_code == 404:
+            warnings.warn(f"Resource not found (404): {page_url}", UserWarning, stacklevel=2)
+            return []
+        raise
     soup = BeautifulSoup(result.text, "html.parser")
 
     subregion_links = _find_subregion_links(page_url, soup)

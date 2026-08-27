@@ -2,7 +2,9 @@
 
 from typing import Any
 
+import pytest
 from pytest_mock import MockerFixture
+from requests.exceptions import HTTPError
 from shapely import box
 from shapely.geometry import mapping
 from tqdm import tqdm
@@ -322,3 +324,37 @@ def test_osm_fr_gather_and_parse(mocker: MockerFixture) -> None:
     assert extract.parent == "osmfr_europe"
     assert extract.url == "https://download.openstreetmap.fr/extracts/europe/monaco-latest.osm.pbf"
     assert extract.geometry.equals(box(7.4, 43.7, 7.5, 43.8))
+
+
+def test_geo2day_gather_404_returns_empty_list_and_warns(mocker: MockerFixture) -> None:
+    """Test if _gather_all_geo2day_urls returns [] and warns on 404."""
+    import osmfinder.sources.geo2day as geo2day_module
+
+    url = "https://geo2day.com/missing.html"
+    response = mocker.Mock()
+    response.status_code = 404
+    response.raise_for_status = mocker.Mock(side_effect=HTTPError(response=response))
+
+    mocker.patch("osmfinder._network.requests.get", return_value=response)
+
+    with pytest.warns(UserWarning, match=f"Resource not found \\(404\\): {url}"):
+        with tqdm(disable=True) as pbar:
+            result = geo2day_module._gather_all_geo2day_urls("GEO2Day", url, pbar)
+    assert result == []
+
+
+def test_osm_fr_gather_404_returns_empty_list_and_warns(mocker: MockerFixture) -> None:
+    """Test if _gather_all_openstreetmap_fr_urls returns [] and warns on 404."""
+    import osmfinder.sources.osm_fr as osm_fr_module
+
+    url = "https://download.openstreetmap.fr/extracts/missing/"
+    response = mocker.Mock()
+    response.status_code = 404
+    response.raise_for_status = mocker.Mock(side_effect=HTTPError(response=response))
+
+    mocker.patch("osmfinder._network.requests.get", return_value=response)
+
+    with pytest.warns(UserWarning, match=f"Resource not found \\(404\\): {url}"):
+        with tqdm(disable=True) as pbar:
+            result = osm_fr_module._gather_all_openstreetmap_fr_urls("osmfr", "/missing/", pbar)
+    assert result == []
