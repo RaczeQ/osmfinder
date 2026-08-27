@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal indexes logic registration from manual to automatic.
 - Simplified public api with new functions and signatures.
 - Refactored geometry covering logic.
+- Replaced Geod spheroid area calculations with vectorized spherical approximation without pyproj.
+
+### Removed
+
+- `Pyproj` from dependencies
 
 ## [1.0.1] - 2026-08-17
 
