@@ -565,10 +565,10 @@ def test_geometry_covering_step_reasons() -> None:
     assert len(result.steps) == 5
 
     reasons = {step.extract.id: (step.selected, step.reason) for step in result.steps}
-    assert reasons["GEO2Day_europe_austria_vorarlberg"] == (True, "first_extract")
+    assert reasons["osmfr_europe_austria_vorarlberg"] == (True, "first_extract")
     assert reasons["osmfr_europe_switzerland_saint_gallen"] == (True, "selected")
     assert reasons["Movisda-admin_LI"] == (True, "selected")
-    assert reasons["osmfr_europe_switzerland_thurgau"] == (False, "redundant")
+    assert reasons["GEO2Day_europe_switzerland_thurgau"] == (False, "redundant")
     assert reasons["BBBike_Konstanz"] == (True, "selected")
 
 
