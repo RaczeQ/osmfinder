@@ -1,6 +1,6 @@
 [project]
 name = "osmfinder"
-version = "1.0.1"
+version = "1.1.0"
 description = "Find and download OpenStreetMap *.osm.pbf extracts by name, id or geometry."
 readme = "README.md"
 authors = [{ name = "Kamil Raczycki", email = "kraczycki@kraina.ai" }]
@@ -150,7 +150,7 @@ close-quotes-on-newline = true
 wrap-one-line = true
 
 [tool.bumpver]
-current_version = "1.0.1"
+current_version = "1.1.0"
 version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
 commit_message = "chore(CI/CD): bump version {old_version} -> {new_version}"
 commit = true
