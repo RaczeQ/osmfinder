@@ -7,7 +7,6 @@ authors = [{ name = "Kamil Raczycki", email = "kraczycki@kraina.ai" }]
 requires-python = ">=3.10"
 dependencies = [
     "shapely>=2",
-    "pyproj>=3",
     "pooch>=1.6.0",
     "requests",
     "beautifulsoup4",
