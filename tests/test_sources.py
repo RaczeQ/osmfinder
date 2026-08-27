@@ -156,7 +156,7 @@ def test_geo2day_two_phase_gather_and_parse(mocker: MockerFixture) -> None:
         response.text = pages.get(url, "")
         return response
 
-    mocker.patch("osmfinder.sources.geo2day.requests.get", side_effect=fake_get)
+    mocker.patch("osmfinder._network.requests.get", side_effect=fake_get)
     mocker.patch.object(geo2day_module, "parse_geojson_file", return_value=box(0, 0, 1, 1))
 
     with tqdm(disable=True) as pbar:
@@ -260,7 +260,7 @@ def test_bbbike_iterate_index(mocker: MockerFixture) -> None:
         # Aachen has a poly file; Berlin falls back to the CSV bounding box.
         return box(6.0, 50.7, 6.2, 50.9) if "Aachen" in url else None
 
-    mocker.patch("osmfinder.sources.bbbike.requests.get", side_effect=fake_get)
+    mocker.patch("osmfinder._network.requests.get", side_effect=fake_get)
     mocker.patch.object(bbbike_module, "parse_polygon_file", side_effect=fake_poly)
 
     extracts = bbbike_module._iterate_bbbike_index()
@@ -302,7 +302,7 @@ def test_osm_fr_gather_and_parse(mocker: MockerFixture) -> None:
             response.text = ""
         return response
 
-    mocker.patch("osmfinder.sources.osm_fr.requests.get", side_effect=fake_get)
+    mocker.patch("osmfinder._network.requests.get", side_effect=fake_get)
     mocker.patch.object(osm_fr_module, "parse_polygon_file", return_value=box(7.4, 43.7, 7.5, 43.8))
 
     with tqdm(disable=True) as pbar:

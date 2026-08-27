@@ -412,7 +412,7 @@ def test_request_timeout_is_passed(mocker: MockerFixture) -> None:
         }
         return response
 
-    mocker.patch("osmfinder.parsers.geojson.requests.get", side_effect=fake_get)
+    mocker.patch("osmfinder._network.requests.get", side_effect=fake_get)
     geojson_parser_module.parse_geojson_file("http://example.com/extent.geojson")
 
     assert captured_kwargs.get("timeout") == OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS

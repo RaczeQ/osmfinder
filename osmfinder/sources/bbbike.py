@@ -6,12 +6,12 @@ This module contains wrapper for publically available BBBike download server.
 
 from typing import Any
 
-import requests
 from shapely import box
 from tqdm import tqdm
 
 from osmfinder._compat import FORCE_TERMINAL
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
+from osmfinder._network import get_with_retries
 from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.extract import load_index_decorator
 from osmfinder.parsers.poly import parse_polygon_file
@@ -46,7 +46,7 @@ def _iterate_bbbike_index() -> list[OpenStreetMapExtract]:  # pragma: no cover
     from bs4 import BeautifulSoup
 
     extracts = []
-    result = requests.get(
+    result = get_with_retries(
         BBBIKE_EXTRACTS_INDEX_URL,
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,
@@ -58,7 +58,7 @@ def _iterate_bbbike_index() -> list[OpenStreetMapExtract]:  # pragma: no cover
         if extract_href.text != ".."
     ]
 
-    csv_regions_result = requests.get(
+    csv_regions_result = get_with_retries(
         BBBIKE_EXTRACTS_CSV_LIST_URL,
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,

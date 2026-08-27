@@ -2,10 +2,10 @@
 
 from typing import Any
 
-import requests
 from shapely.geometry import MultiPolygon
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
+from osmfinder._network import get_with_retries
 
 __all__ = ["parse_polygon_file"]
 
@@ -21,7 +21,7 @@ def parse_polygon_file(polygon_url: str) -> MultiPolygon | None:  # pragma: no c
         MultiPolygon | None: Parsed polygon.
             Empty if request returns 404 not found.
     """
-    result = requests.get(
+    result = get_with_retries(
         polygon_url,
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,

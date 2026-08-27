@@ -8,10 +8,10 @@ import json
 import operator
 from typing import Any
 
-import requests
 from shapely.geometry import shape
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
+from osmfinder._network import get_with_retries
 from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.extract import load_index_decorator
 
@@ -26,7 +26,7 @@ def _load_geofabrik_index(**kwargs: Any) -> OsmExtractsIndex:  # pragma: no cove
     Returns:
         OsmExtractsIndex: Extracts index with metadata.
     """
-    result = requests.get(
+    result = get_with_retries(
         GEOFABRIK_INDEX_URL,
         headers={"User-Agent": USER_AGENT},
         timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,
