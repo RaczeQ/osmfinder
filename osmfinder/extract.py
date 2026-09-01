@@ -23,6 +23,7 @@ from osmfinder.exceptions import (
 )
 
 LFS_DIRECTORY_URL = "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/precalculated_indexes"
+TEST_LFS_DIRECTORY_URL = "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/tests/test_indexes"
 
 _QUICK_REFRESH_SOURCES: set[OsmExtractSource] = set()
 _REGISTERED_INDEX_LOADERS: dict[OsmExtractSource, Callable[..., OsmExtractsIndex]] = {}
@@ -202,13 +203,16 @@ def _invalidated_cache_path(path: Path) -> Path:
     return path.with_name(path.name + ".old")
 
 
-def _download_precalculated_index_from_github(destination_path: Path) -> bool:
+def _download_precalculated_index_from_github(
+    destination_path: Path, use_test_indexes: bool = False
+) -> bool:
     logger = get_pooch_logger()
     logger.setLevel("WARNING")
 
     try:
         index_content_file_name = destination_path.name
-        index_content_file_url = f"{LFS_DIRECTORY_URL}/{index_content_file_name}"
+        lfs_path = LFS_DIRECTORY_URL if not use_test_indexes else TEST_LFS_DIRECTORY_URL
+        index_content_file_url = f"{lfs_path}/{index_content_file_name}"
         retrieve(
             index_content_file_url,
             fname=index_content_file_name,
