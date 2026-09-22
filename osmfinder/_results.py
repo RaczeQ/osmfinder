@@ -171,10 +171,13 @@ class OsmfinderGeometryResult(OsmfinderResult):
         for step in self.steps:
             steps_by_polygon[step.sub_polygon_index].append(step)
 
+        # Only show polygon grouping if there are multiple polygons
+        show_polygon_groups = len(steps_by_polygon) > 1
+
         steps_lines_parts = []
         for poly_idx in sorted(steps_by_polygon.keys(), key=lambda x: x if x is not None else -1):
             poly_steps = steps_by_polygon[poly_idx]
-            if poly_idx is not None:
+            if show_polygon_groups and poly_idx is not None:
                 steps_lines_parts.append(f"    [polygon {poly_idx}]:")
             for step in poly_steps:
                 steps_lines_parts.append(
