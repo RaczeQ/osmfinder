@@ -4,7 +4,7 @@ import warnings
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
 
 import platformdirs
 from dateutil.relativedelta import relativedelta
@@ -14,7 +14,8 @@ from requests import HTTPError
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS
 from osmfinder._io import read_parquet_index, write_parquet_index
-from osmfinder._typing import OsmExtractsIndex, OsmExtractSource
+from osmfinder._results import OsmfinderResult
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.exceptions import (
     MissingOsmCacheWarning,
     OldOsmCacheWarning,
@@ -22,8 +23,13 @@ from osmfinder.exceptions import (
     OsmExtractIndexOutdatedWarning,
 )
 
+if TYPE_CHECKING:
+    from geopandas import GeoDataFrame
+
 LFS_DIRECTORY_URL = "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/precalculated_indexes"
-TEST_LFS_DIRECTORY_URL = "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/tests/test_indexes"
+TEST_LFS_DIRECTORY_URL = (
+    "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/tests/test_indexes"
+)
 
 _QUICK_REFRESH_SOURCES: set[OsmExtractSource] = set()
 _REGISTERED_INDEX_LOADERS: dict[OsmExtractSource, Callable[..., OsmExtractsIndex]] = {}
@@ -232,3 +238,32 @@ def _download_precalculated_index_from_github(
 
 def _get_file_creation_date(path: Path) -> datetime:
     return datetime.fromtimestamp(path.stat().st_ctime)
+
+
+def extracts_to_geodataframe(
+    extracts: list[OpenStreetMapExtract] | OsmExtractsIndex | OsmfinderResult,
+) -> "GeoDataFrame":
+    """Transforms a list of OpenStreetMapExtracts to a GeoDataFrame."""
+    try:
+        import geopandas as gpd
+    except ImportError as ex:
+        raise ImportError(
+            "The geopandas package is required for transforming the index. "
+            "You can install it using 'conda install -c conda-forge geopandas' or "
+            "'pip install geopandas'."
+        ) from ex
+
+    from dataclasses import asdict
+
+    from osmfinder._constants import WGS84_CRS
+
+    if isinstance(extracts, OsmExtractsIndex):
+        extracts_list = list(extracts)
+    elif isinstance(extracts, OsmfinderResult):
+        extracts_list = extracts.extracts
+    else:
+        extracts_list = extracts
+
+    return gpd.GeoDataFrame(
+        data=[asdict(extract) for extract in extracts_list], geometry="geometry"
+    ).set_crs(WGS84_CRS)
