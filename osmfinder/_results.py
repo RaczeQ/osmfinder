@@ -165,16 +165,24 @@ class OsmfinderGeometryResult(OsmfinderResult):
             else "    none"
         )
 
-        steps_lines = (
-            "\n".join(
-                f"    {step.extract.id} — {step.extract.name}\n"
-                f"      iou: {step.iou:.4f}, "
-                f"{'selected' if step.selected else 'skipped'}, {step.reason}"
-                for step in self.steps
-            )
-            if self.steps
-            else "    none"
-        )
+        # Group steps by sub_polygon_index for clearer output
+        from collections import defaultdict
+        steps_by_polygon: dict[int | None, list[GeometryCoveringStep]] = defaultdict(list)
+        for step in self.steps:
+            steps_by_polygon[step.sub_polygon_index].append(step)
+
+        steps_lines_parts = []
+        for poly_idx in sorted(steps_by_polygon.keys(), key=lambda x: x if x is not None else -1):
+            poly_steps = steps_by_polygon[poly_idx]
+            if poly_idx is not None:
+                steps_lines_parts.append(f"    [polygon {poly_idx}]:")
+            for step in poly_steps:
+                steps_lines_parts.append(
+                    f"      {step.extract.id} — {step.extract.name}\n"
+                    f"        iou: {step.iou:.4f}, "
+                    f"{'selected' if step.selected else 'skipped'}, {step.reason}"
+                )
+        steps_lines = "\n".join(steps_lines_parts) if steps_lines_parts else "    none"
 
         return (
             f"{self.__class__.__name__}\n"
@@ -259,9 +267,13 @@ class GeometryCoveringStep:
     geometry_to_cover: BaseGeometry
     intersection_geometry: BaseGeometry
     cumulative_coverage: float = 0.0
+    sub_polygon_index: int | None = None
 
     def __repr__(self) -> str:
-        return f"GeometryCoveringStep({self.extract.id}, {self.extract.name})"
+        base = f"GeometryCoveringStep({self.extract.id}, {self.extract.name})"
+        if self.sub_polygon_index is not None:
+            base += f" [polygon {self.sub_polygon_index}]"
+        return base
 
 
 @dataclass

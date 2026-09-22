@@ -134,19 +134,23 @@ def _find_smallest_containing_extracts(
         )
 
         all_steps: list[GeometryCoveringStep] = []
-        for extract_ids_set, steps in process_map(
-            find_extracts_func,
-            geometries,
-            desc="Finding matching extracts",
-            max_workers=num_of_multiprocessing_workers,
-            chunksize=ceil(total_polygons / (4 * num_of_multiprocessing_workers)),
-            disable=FORCE_TERMINAL,
+        for i, (extract_ids_set, steps) in enumerate(
+            process_map(
+                find_extracts_func,
+                geometries,
+                desc="Finding matching extracts",
+                max_workers=num_of_multiprocessing_workers,
+                chunksize=ceil(total_polygons / (4 * num_of_multiprocessing_workers)),
+                disable=FORCE_TERMINAL,
+            )
         ):
             unique_extracts_ids.update(extract_ids_set)
+            for step in steps:
+                step.sub_polygon_index = i
             all_steps.extend(steps)
     else:
         all_steps = []
-        for sub_geometry in geometries:
+        for i, sub_geometry in enumerate(geometries):
             extract_ids_set, steps = _find_smallest_containing_extracts_for_single_geometry(
                 geometry=sub_geometry,
                 polygons_index=polygons_index,
@@ -154,6 +158,8 @@ def _find_smallest_containing_extracts(
                 allow_uncovered_geometry=allow_uncovered_geometry,
             )
             unique_extracts_ids.update(extract_ids_set)
+            for step in steps:
+                step.sub_polygon_index = i
             all_steps.extend(steps)
 
     extracts_filtered = _filter_extracts(
