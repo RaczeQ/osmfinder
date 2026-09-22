@@ -243,7 +243,17 @@ def _get_file_creation_date(path: Path) -> datetime:
 def extracts_to_geodataframe(
     extracts: list[OpenStreetMapExtract] | OsmExtractsIndex | OsmfinderResult,
 ) -> "GeoDataFrame":
-    """Transforms a list of OpenStreetMapExtracts to a GeoDataFrame."""
+    """Convert extracts into a GeoDataFrame with WGS 84 geometries.
+
+    Args:
+        extracts (list[OpenStreetMapExtract] | OsmExtractsIndex | OsmfinderResult):
+            Extract metadata to convert. Indexes and result objects are expanded
+            to their underlying extract objects.
+
+    Returns:
+        geopandas.GeoDataFrame: One row per extract, with extract metadata and a
+            geometry column using the WGS 84 coordinate reference system.
+    """
     try:
         import geopandas as gpd
     except ImportError as ex:
@@ -253,7 +263,7 @@ def extracts_to_geodataframe(
             "'pip install geopandas'."
         ) from ex
 
-    from dataclasses import asdict
+    from dataclasses import asdict, fields
 
     from osmfinder._constants import WGS84_CRS
 
@@ -264,6 +274,13 @@ def extracts_to_geodataframe(
     else:
         extracts_list = extracts
 
-    return gpd.GeoDataFrame(
-        data=[asdict(extract) for extract in extracts_list], geometry="geometry"
-    ).set_crs(WGS84_CRS)
+    extract_dicts = [asdict(extract) for extract in extracts_list]
+    if not extract_dicts:
+        empty_data: dict[str, list[Any]] = {
+            field.name: [] for field in fields(OpenStreetMapExtract)
+        }
+        return gpd.GeoDataFrame(data=empty_data, geometry="geometry").set_crs(
+            WGS84_CRS
+        )
+
+    return gpd.GeoDataFrame(data=extract_dicts, geometry="geometry").set_crs(WGS84_CRS)
