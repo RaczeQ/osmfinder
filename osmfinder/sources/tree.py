@@ -17,26 +17,42 @@ def get_available_extracts_as_rich_tree(
     source_enum: OsmExtractSource,
     osm_extract_source_index_functions: dict[OsmExtractSource, Callable[..., OsmExtractsIndex]],
     use_full_names: bool = False,
+    head: int | None = None,
 ) -> Tree:
     """Transform available OSM extracts into a tree from the Rich library."""
+    shown: list[int] = [0]  # list not int: ints are immutable, won't propagate recursively
     if source_enum == OsmExtractSource.any:
         root = Tree("All extracts")
         for other_source_enum, get_index_function in osm_extract_source_index_functions.items():
+            if head is not None and shown[0] >= head:
+                break
             branch_id = other_source_enum.value
             branch = root.add(branch_id)
-            _add_index_to_tree(branch_id, branch, get_index_function(), use_full_names)
+            _add_index_to_tree(
+                branch_id, branch, get_index_function(), use_full_names, head, shown
+            )
     else:
         root_id = source_enum.value
         root = Tree(root_id)
         _add_index_to_tree(
-            root_id, root, osm_extract_source_index_functions[source_enum](), use_full_names
+            root_id,
+            root,
+            osm_extract_source_index_functions[source_enum](),
+            use_full_names,
+            head,
+            shown,
         )
 
     return root
 
 
 def _add_index_to_tree(
-    root_id: str, tree: Tree, index: OsmExtractsIndex, use_full_names: bool
+    root_id: str,
+    tree: Tree,
+    index: OsmExtractsIndex,
+    use_full_names: bool,
+    head: int | None = None,
+    shown: list[int] | None = None,
 ) -> None:
     """
     Build Rich tree branches for a single extracts index.
@@ -50,16 +66,27 @@ def _add_index_to_tree(
         tree (Tree): Tree object from Rich library.
         index (OsmExtractsIndex): List of available OSM extracts.
         use_full_names (bool): Whether to display full name, or short name of the extract.
+        head (int | None): Maximum number of extract leaf nodes to display.
+        shown (list[int] | None): Mutable counter (one-element list, not plain int)
+            tracking how many leaf nodes have been added so far. Uses a list because
+            Python ints are immutable and wouldn't propagate across recursive calls.
+            Used internally for pruning with ``head``.
     """
     children_by_parent: dict[str, list[dict[str, Any]]] = _group_children_by_parent(index)
 
-    create_rich_tree_branch(root_id, tree, children_by_parent, use_full_names)
+    create_rich_tree_branch(
+        root_id, tree, children_by_parent, use_full_names, head, shown
+    )
 
     # Attach loose parents - referenced as a parent, but not present as an extract id.
     loose_parents = sorted(set(children_by_parent).difference(index.ids).difference([root_id]))
     for loose_parent in loose_parents:
+        if head is not None and shown is not None and shown[0] >= head:
+            break
         branch = tree.add(loose_parent)
-        create_rich_tree_branch(loose_parent, branch, children_by_parent, use_full_names)
+        create_rich_tree_branch(
+            loose_parent, branch, children_by_parent, use_full_names, head, shown
+        )
 
 
 def _group_children_by_parent(index: OsmExtractsIndex) -> dict[str, list[dict[str, Any]]]:
@@ -86,6 +113,8 @@ def create_rich_tree_branch(
     tree: Tree,
     children_by_parent: dict[str, list[dict[str, Any]]],
     use_full_names: bool,
+    head: int | None = None,
+    shown: list[int] | None = None,
 ) -> None:
     """
     Iterate OSM extracts recursively and create tree branches.
@@ -97,14 +126,25 @@ def create_rich_tree_branch(
             with children pre-sorted by name.
         use_full_names (bool): Whether to display full name, or short name of the extract.
             Full name contains all parents of the extract.
+        head (int | None): Maximum number of extract leaf nodes to display.
+        shown (list[int] | None): Mutable counter (one-element list, not plain int)
+            tracking how many leaf nodes have been added so far. Uses a list because
+            Python ints are immutable and wouldn't propagate across recursive calls.
+            Used internally for pruning with ``head``.
     """
     for matching_child in children_by_parent.get(parent_id, []):
+        if head is not None and shown is not None and shown[0] >= head:
+            break
         name = matching_child["file_name"] if use_full_names else matching_child["name"]
         url = matching_child["url"]
         area = human_format(matching_child["area"])
         branch = tree.add(f":globe_with_meridians: [link={url}]{name}[/link] ({area} km\u00b2)")
+        if head is not None and shown is not None:
+            shown[0] += 1
 
-        create_rich_tree_branch(matching_child["id"], branch, children_by_parent, use_full_names)
+        create_rich_tree_branch(
+            matching_child["id"], branch, children_by_parent, use_full_names, head, shown
+        )
 
 
 def human_format(num: float) -> str:
