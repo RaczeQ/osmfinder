@@ -174,7 +174,7 @@ class OsmfinderGeometryResult(OsmfinderResult):
         steps_lines_parts = []
         for poly_idx in sorted(steps_by_polygon.keys(), key=lambda x: x if x is not None else -1):
             poly_steps = steps_by_polygon[poly_idx]
-            if spoly_idx is not None:
+            if poly_idx is not None:
                 steps_lines_parts.append(f"    [polygon {poly_idx}]:")
             for step in poly_steps:
                 steps_lines_parts.append(
