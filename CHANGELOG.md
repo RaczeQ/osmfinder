@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-23
+
 ### Added
 
 - `to_geodataframe` function for `OsmExtractsIndex` class.
@@ -55,7 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `find_smallest_containing_extracts`, `find_and_download_extracts_pbf_files`,
   `find_extracts_covering_point`, `display_available_extracts`, `clear_osm_index_cache`.
 
-[Unreleased]: https://github.com/RaczeQ/osmfinder/compare/1.1.0...HEAD
+[Unreleased]: https://github.com/RaczeQ/osmfinder/compare/1.2.0...HEAD
+
+[1.2.0]: https://github.com/RaczeQ/osmfinder/compare/1.1.0...1.2.0
 
 [1.1.0]: https://github.com/RaczeQ/osmfinder/compare/1.0.1...1.1.0
 
