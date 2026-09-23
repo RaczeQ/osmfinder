@@ -132,6 +132,8 @@ def create_rich_tree_branch(
             Python ints are immutable and wouldn't propagate across recursive calls.
             Used internally for pruning with ``head``.
     """
+    if head is not None and shown is None:
+        shown = [0]
     for matching_child in children_by_parent.get(parent_id, []):
         if head is not None and shown is not None and shown[0] >= head:
             break
