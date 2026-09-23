@@ -22,6 +22,7 @@ def display_available_extracts(
     source: OsmExtractSource | str,
     use_full_names: bool = True,
     use_pager: bool = False,
+    head: int | None = None,
 ) -> None:
     """
     Display all available OSM extracts in the form of a tree.
@@ -34,6 +35,8 @@ def display_available_extracts(
             Full name contains all parents of the extract. Defaults to `True`.
         use_pager (bool): Whether to display long output using Rich pager
             or just print to output. Defaults to `False`.
+        head (int | None): If set, display only the first N extracts. Defaults to `None`
+            (show all).
 
     Raises:
         ValueError: If provided source value cannot be parsed to OsmExtractSource.
@@ -43,7 +46,10 @@ def display_available_extracts(
     try:
         source_enum = OsmExtractSource(source)
         tree = get_available_extracts_as_rich_tree(
-            source_enum, _finder.OSM_EXTRACT_SOURCE_INDEX_FUNCTION, use_full_names
+            source_enum,
+            _finder.OSM_EXTRACT_SOURCE_INDEX_FUNCTION,
+            use_full_names,
+            head,
         )
         if not use_pager:
             rprint(tree)

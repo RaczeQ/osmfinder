@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `to_geodataframe` function for `OsmExtractsIndex` class.
+- `extracts_to_geodataframe` function to convert extracts to GeoDataFrame.
+- `head` parameter to `display_available_extracts` function to limit displayed results.
+- `sub_polygon_index` attribute to `GeometryCoveringStep` for better polygon tracking.
+- Option to download test indexes from GitHub repository.
+
+### Fixed
+
+- Silenced warnings inside CLI when downloading results
+
 ## [1.1.0] - 2026-08-27
 
 ### Added

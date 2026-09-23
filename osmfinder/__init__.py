@@ -15,7 +15,7 @@ from osmfinder._results import (
     OsmfinderQueryResult,
 )
 from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource
-from osmfinder.extract import clear_osm_index_cache
+from osmfinder.extract import clear_osm_index_cache, extracts_to_geodataframe
 from osmfinder.finder import (
     OsmExtractSourceLike,
     display_available_extracts,
@@ -45,4 +45,5 @@ __all__ = [
     "find_extracts_by_geometry",
     "find_extracts_covering_point",
     "get_available_extracts",
+    "extracts_to_geodataframe",
 ]

@@ -9,6 +9,7 @@ from shapely import STRtree, is_valid, make_valid
 from osmfinder._area_helper import calculate_spherical_area
 
 if TYPE_CHECKING:  # pragma: no cover
+    import geopandas as gpd
     from shapely.geometry.base import BaseGeometry
 
 
@@ -206,6 +207,32 @@ class OsmExtractsIndex:
             parents=self.parents[mask],
             urls=self.urls[mask],
         )
+
+    def to_geodataframe(self) -> "gpd.GeoDataFrame":
+        try:
+            import geopandas as gpd
+        except ImportError as ex:
+            raise ImportError(
+                "The geopandas package is required for transforming the index. "
+                "You can install it using 'conda install -c conda-forge geopandas' or "
+                "'pip install geopandas'."
+            ) from ex
+
+        gdf = gpd.GeoDataFrame(
+            {
+                "id": self.ids,
+                "name": self.names,
+                "file_name": self.file_names,
+                "parent": self.parents,
+                "area": self.areas,
+                "url": self.urls,
+                "geometry": self.geometries,
+            },
+            geometry="geometry",
+            crs=4326,
+        )
+
+        return gdf
 
 
 def _ensure_valid_geometries(geometries: np.ndarray) -> np.ndarray:

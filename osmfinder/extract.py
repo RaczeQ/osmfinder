@@ -4,7 +4,7 @@ import warnings
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
 
 import platformdirs
 from dateutil.relativedelta import relativedelta
@@ -14,7 +14,8 @@ from requests import HTTPError
 
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS
 from osmfinder._io import read_parquet_index, write_parquet_index
-from osmfinder._typing import OsmExtractsIndex, OsmExtractSource
+from osmfinder._results import OsmfinderResult
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.exceptions import (
     MissingOsmCacheWarning,
     OldOsmCacheWarning,
@@ -22,7 +23,13 @@ from osmfinder.exceptions import (
     OsmExtractIndexOutdatedWarning,
 )
 
+if TYPE_CHECKING:
+    from geopandas import GeoDataFrame
+
 LFS_DIRECTORY_URL = "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/precalculated_indexes"
+TEST_LFS_DIRECTORY_URL = (
+    "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/tests/test_indexes"
+)
 
 _QUICK_REFRESH_SOURCES: set[OsmExtractSource] = set()
 _REGISTERED_INDEX_LOADERS: dict[OsmExtractSource, Callable[..., OsmExtractsIndex]] = {}
@@ -202,13 +209,16 @@ def _invalidated_cache_path(path: Path) -> Path:
     return path.with_name(path.name + ".old")
 
 
-def _download_precalculated_index_from_github(destination_path: Path) -> bool:
+def _download_precalculated_index_from_github(
+    destination_path: Path, use_test_indexes: bool = False
+) -> bool:
     logger = get_pooch_logger()
     logger.setLevel("WARNING")
 
     try:
         index_content_file_name = destination_path.name
-        index_content_file_url = f"{LFS_DIRECTORY_URL}/{index_content_file_name}"
+        lfs_path = LFS_DIRECTORY_URL if not use_test_indexes else TEST_LFS_DIRECTORY_URL
+        index_content_file_url = f"{lfs_path}/{index_content_file_name}"
         retrieve(
             index_content_file_url,
             fname=index_content_file_name,
@@ -228,3 +238,49 @@ def _download_precalculated_index_from_github(destination_path: Path) -> bool:
 
 def _get_file_creation_date(path: Path) -> datetime:
     return datetime.fromtimestamp(path.stat().st_ctime)
+
+
+def extracts_to_geodataframe(
+    extracts: list[OpenStreetMapExtract] | OsmExtractsIndex | OsmfinderResult,
+) -> "GeoDataFrame":
+    """Convert extracts into a GeoDataFrame with WGS 84 geometries.
+
+    Args:
+        extracts (list[OpenStreetMapExtract] | OsmExtractsIndex | OsmfinderResult):
+            Extract metadata to convert. Indexes and result objects are expanded
+            to their underlying extract objects.
+
+    Returns:
+        geopandas.GeoDataFrame: One row per extract, with extract metadata and a
+            geometry column using the WGS 84 coordinate reference system.
+    """
+    try:
+        import geopandas as gpd
+    except ImportError as ex:
+        raise ImportError(
+            "The geopandas package is required for transforming the index. "
+            "You can install it using 'conda install -c conda-forge geopandas' or "
+            "'pip install geopandas'."
+        ) from ex
+
+    from dataclasses import asdict, fields
+
+    from osmfinder._constants import WGS84_CRS
+
+    if isinstance(extracts, OsmExtractsIndex):
+        extracts_list = list(extracts)
+    elif isinstance(extracts, OsmfinderResult):
+        extracts_list = extracts.extracts
+    else:
+        extracts_list = extracts
+
+    extract_dicts = [asdict(extract) for extract in extracts_list]
+    if not extract_dicts:
+        empty_data: dict[str, list[Any]] = {
+            field.name: [] for field in fields(OpenStreetMapExtract)
+        }
+        return gpd.GeoDataFrame(data=empty_data, geometry="geometry").set_crs(
+            WGS84_CRS
+        )
+
+    return gpd.GeoDataFrame(data=extract_dicts, geometry="geometry").set_crs(WGS84_CRS)

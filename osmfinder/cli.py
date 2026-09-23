@@ -341,27 +341,27 @@ def search_cmd(
             err_console.print(f"[red]Error:[/red] {ex}")
             raise typer.Exit(code=1) from None
 
-    _print_query_result(result)
+        _print_query_result(result)
 
-    if not dry_run:
-        err_console.print(
-            f"[bold blue]Downloading {len(result.extracts)} extract(s)...[/bold blue]"
-        )
-        try:
-            dl_result = download(
-                query,
-                source=source,
-                download_directory=output or Path("files"),
-                select_first_match=select_first_match,
-                progressbar=progressbar,
+        if not dry_run:
+            err_console.print(
+                f"[bold blue]Downloading {len(result.extracts)} extract(s)...[/bold blue]"
             )
-            for path in dl_result.download_paths:
-                err_console.print(f"[green]Downloaded:[/green] {path}")
-            for extract in dl_result.unavailable_extracts:
-                err_console.print(f"[yellow]Unavailable:[/yellow] {extract.file_name}")
-        except Exception as ex:
-            err_console.print(f"[red]Download error:[/red] {ex}")
-            raise typer.Exit(code=1) from None
+            try:
+                dl_result = download(
+                    query,
+                    source=source,
+                    download_directory=output or Path("files"),
+                    select_first_match=select_first_match,
+                    progressbar=progressbar,
+                )
+                for path in dl_result.download_paths:
+                    err_console.print(f"[green]Downloaded:[/green] {path}")
+                for extract in dl_result.unavailable_extracts:
+                    err_console.print(f"[yellow]Unavailable:[/yellow] {extract.file_name}")
+            except Exception as ex:
+                err_console.print(f"[red]Download error:[/red] {ex}")
+                raise typer.Exit(code=1) from None
 
 
 @app.command("covers")  # type: ignore[misc]
@@ -546,30 +546,30 @@ def covers_cmd(
             err_console.print(f"[red]Error:[/red] {ex}")
             raise typer.Exit(code=1) from None
 
-    _print_geometry_result(result)
+        _print_geometry_result(result)
 
-    if not dry_run and result.extracts:
-        err_console.print(
-            f"[bold blue]Downloading {len(result.extracts)} extract(s)...[/bold blue]"
-        )
-        try:
-            dl_result = download(
-                geometry,
-                source=source,
-                download_directory=output or Path("files"),
-                geometry_coverage_iou_threshold=iou_threshold,
-                allow_uncovered_geometry=allow_uncovered_geometry,
-                force_single_result=single_result,
-                single_result_iou_threshold=single_iou_threshold,
-                progressbar=progressbar,
+        if not dry_run and result.extracts:
+            err_console.print(
+                f"[bold blue]Downloading {len(result.extracts)} extract(s)...[/bold blue]"
             )
-            for path in dl_result.download_paths:
-                err_console.print(f"[green]Downloaded:[/green] {path}")
-            for extract in dl_result.unavailable_extracts:
-                err_console.print(f"[yellow]Unavailable:[/yellow] {extract.file_name}")
-        except Exception as ex:
-            err_console.print(f"[red]Download error:[/red] {ex}")
-            raise typer.Exit(code=1) from None
+            try:
+                dl_result = download(
+                    geometry,
+                    source=source,
+                    download_directory=output or Path("files"),
+                    geometry_coverage_iou_threshold=iou_threshold,
+                    allow_uncovered_geometry=allow_uncovered_geometry,
+                    force_single_result=single_result,
+                    single_result_iou_threshold=single_iou_threshold,
+                    progressbar=progressbar,
+                )
+                for path in dl_result.download_paths:
+                    err_console.print(f"[green]Downloaded:[/green] {path}")
+                for extract in dl_result.unavailable_extracts:
+                    err_console.print(f"[yellow]Unavailable:[/yellow] {extract.file_name}")
+            except Exception as ex:
+                err_console.print(f"[red]Download error:[/red] {ex}")
+                raise typer.Exit(code=1) from None
 
 
 @app.command("clear")  # type: ignore[misc]
