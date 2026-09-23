@@ -141,7 +141,11 @@ def create_rich_tree_branch(
         url = matching_child["url"]
         area = human_format(matching_child["area"])
         branch = tree.add(f":globe_with_meridians: [link={url}]{name}[/link] ({area} km\u00b2)")
-        if head is not None and shown is not None:
+        if (
+            head is not None
+            and shown is not None
+            and not children_by_parent.get(matching_child["id"], [])
+        ):
             shown[0] += 1
 
         create_rich_tree_branch(
