@@ -19,8 +19,6 @@ import warnings
 from collections.abc import Callable
 from functools import partial
 
-from requests.exceptions import RequestException
-
 from osmfinder._typing import OsmExtractsIndex, OsmExtractSource, OsmExtractSourceLike
 from osmfinder.exceptions import (
     OsmExtractsIndexesUnavailableError,
@@ -122,8 +120,9 @@ def _get_index_for_sources(source: OsmExtractSourceLike | None) -> OsmExtractsIn
 
     For a single source, loading errors propagate - the request can't be fulfilled otherwise.
     For multiple sources (including ``any``), sources whose index can't be loaded (e.g. when
-    offline and not cached locally) are skipped with a warning, as long as at least one source
-    loads successfully. If none can be loaded, an error is raised.
+    offline and not cached locally, or whose upstream server is unreachable) are skipped with
+    a warning, as long as at least one source loads successfully. If none can be loaded, an
+    error is raised.
     """
     resolved_sources = _resolve_extract_sources(source)
 
@@ -135,7 +134,7 @@ def _get_index_for_sources(source: OsmExtractSourceLike | None) -> OsmExtractsIn
     for resolved_source in resolved_sources:
         try:
             loaded_indexes.append(OSM_EXTRACT_SOURCE_INDEX_FUNCTION[resolved_source]())
-        except RequestException:
+        except Exception:
             unavailable_sources.append(resolved_source)
 
     if unavailable_sources:
