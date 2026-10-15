@@ -16,7 +16,8 @@ from osmfinder.exceptions import (
     OsmExtractsIndexesUnavailableError,
     OsmExtractSourceUnavailableWarning,
 )
-from osmfinder.extract import _load_all_indexes_with_fallback, extracts_to_geodataframe
+from osmfinder.extract import extracts_to_geodataframe
+from osmfinder.finder import _get_index_for_sources
 
 
 def _make_extracts() -> list[OpenStreetMapExtract]:
@@ -130,20 +131,21 @@ def test_load_all_indexes_with_fallback_skips_unavailable_sources(
         raise ConnectionError("server down")
 
     mocker.patch.dict(
-        "osmfinder.extract._REGISTERED_INDEX_LOADERS",
+        "osmfinder.finder.OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
         {
-            OsmExtractSource.geofabrik: lambda **kwargs: _single_extract_index("geofabrik"),
-            OsmExtractSource.bbbike: lambda **kwargs: _single_extract_index("bbbike"),
+            OsmExtractSource.geofabrik: lambda: _single_extract_index("geofabrik"),
+            OsmExtractSource.bbbike: lambda: _single_extract_index("bbbike"),
             OsmExtractSource.movisda_grid: unavailable,
         },
         clear=True,
     )
 
     with pytest.warns(OsmExtractSourceUnavailableWarning) as warning_list:
-        combined_index, successful_sources = _load_all_indexes_with_fallback()
+        combined_index = _get_index_for_sources(
+            [OsmExtractSource.geofabrik, OsmExtractSource.bbbike, OsmExtractSource.movisda_grid]
+        )
 
     assert set(combined_index.ids) == {"geofabrik", "bbbike"}
-    assert set(successful_sources) == {OsmExtractSource.geofabrik, OsmExtractSource.bbbike}
     assert any("movisda" in str(w.message).lower() for w in warning_list)
 
 
@@ -151,13 +153,11 @@ def test_load_all_indexes_with_fallback_raises_when_all_fail(
     mocker: MockerFixture,
 ) -> None:
     """Test if an error is raised when all sources fail to load."""
-    mocker.patch.dict("osmfinder.extract._index_cache", {}, clear=True)
-
     def unavailable() -> Any:
         raise ConnectionError("server down")
 
     mocker.patch.dict(
-        "osmfinder.extract._REGISTERED_INDEX_LOADERS",
+        "osmfinder.finder.OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
         {
             OsmExtractSource.geofabrik: unavailable,
             OsmExtractSource.bbbike: unavailable,
@@ -165,28 +165,30 @@ def test_load_all_indexes_with_fallback_raises_when_all_fail(
         clear=True,
     )
 
-    with pytest.raises(OsmExtractsIndexesUnavailableError):
-        _load_all_indexes_with_fallback()
+    with (
+        pytest.warns(OsmExtractSourceUnavailableWarning),
+        pytest.raises(OsmExtractsIndexesUnavailableError),
+    ):
+        _get_index_for_sources([OsmExtractSource.geofabrik, OsmExtractSource.bbbike])
 
 
 def test_load_all_indexes_with_fallback_succeeds_when_all_available(
     mocker: MockerFixture,
 ) -> None:
     """Test if all sources are loaded successfully when none fail."""
-    mocker.patch.dict("osmfinder.extract._index_cache", {}, clear=True)
-
     mocker.patch.dict(
-        "osmfinder.extract._REGISTERED_INDEX_LOADERS",
+        "osmfinder.finder.OSM_EXTRACT_SOURCE_INDEX_FUNCTION",
         {
-            OsmExtractSource.geofabrik: lambda **kwargs: _single_extract_index("geofabrik"),
-            OsmExtractSource.bbbike: lambda **kwargs: _single_extract_index("bbbike"),
+            OsmExtractSource.geofabrik: lambda: _single_extract_index("geofabrik"),
+            OsmExtractSource.bbbike: lambda: _single_extract_index("bbbike"),
         },
         clear=True,
     )
 
     with warnings.catch_warnings():
         warnings.simplefilter("error", OsmExtractSourceUnavailableWarning)
-        combined_index, successful_sources = _load_all_indexes_with_fallback()
+        combined_index = _get_index_for_sources(
+            [OsmExtractSource.geofabrik, OsmExtractSource.bbbike]
+        )
 
     assert set(combined_index.ids) == {"geofabrik", "bbbike"}
-    assert set(successful_sources) == {OsmExtractSource.geofabrik, OsmExtractSource.bbbike}
