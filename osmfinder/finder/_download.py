@@ -59,6 +59,12 @@ def _download_single_extract(
         progressbar = False
     if hasattr(progressbar, "set_description"):
         progressbar.set_description(target_path.name)
+    if not isinstance(progressbar, bool):
+        try:
+            bool(progressbar)
+        except TypeError:
+            # `pooch` checks the truth value before setting `total`, which `tqdm()` can't answer
+            progressbar.total = 1
 
     with tempfile.TemporaryDirectory(dir=download_directory) as tmp_dir:
         downloaded = retrieve(
