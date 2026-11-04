@@ -14,7 +14,7 @@ from osmfinder._results import (
     OsmfinderGeometryResult,
     OsmfinderQueryResult,
 )
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, ProgressBar, ProgressBarLike
 from osmfinder.extract import clear_osm_index_cache, extracts_to_geodataframe
 from osmfinder.finder import (
     OsmExtractSourceLike,
@@ -37,6 +37,8 @@ __all__ = [
     "OsmfinderDownloadResult",
     "OsmfinderGeometryResult",
     "OsmfinderQueryResult",
+    "ProgressBar",
+    "ProgressBarLike",
     "clear_osm_index_cache",
     "display_available_extracts",
     "download",

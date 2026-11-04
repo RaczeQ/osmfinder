@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from shapely.geometry.base import BaseGeometry
 
-    from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource
+    from osmfinder._typing import OpenStreetMapExtract, OsmExtractSource, ProgressBarLike
 
 
 def _format_extract_list(extracts: list[OpenStreetMapExtract], max_items: int = 5) -> str:
@@ -59,7 +59,7 @@ class OsmfinderResult:
     def download(
         self,
         download_directory: str | Path = "files",
-        progressbar: bool = True,
+        progressbar: ProgressBarLike = True,
         force_refresh: bool = False,
         retry_on_unavailable: bool = True,
     ) -> OsmfinderDownloadResult:
@@ -74,7 +74,8 @@ class OsmfinderResult:
         Args:
             download_directory (str | Path): Directory where PBF files should be saved.
                 Defaults to "files".
-            progressbar (bool): Show progress bar. Defaults to True.
+            progressbar (ProgressBarLike): Show a default progress bar (`True`), nothing
+            (`False`) or use a custom `ProgressBar` object. Defaults to True.
             force_refresh (bool): When ``True``, re-download even if the file already
                 exists. Defaults to False.
             retry_on_unavailable (bool): When ``True`` and this is a query or geometry
@@ -167,6 +168,7 @@ class OsmfinderGeometryResult(OsmfinderResult):
 
         # Group steps by sub_polygon_index for clearer output
         from collections import defaultdict
+
         steps_by_polygon: dict[int | None, list[GeometryCoveringStep]] = defaultdict(list)
         for step in self.steps:
             steps_by_polygon[step.sub_polygon_index].append(step)

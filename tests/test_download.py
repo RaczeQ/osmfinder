@@ -185,3 +185,58 @@ def test_download_query_result_retry_on_unavailable_true(mocker: MockerFixture) 
 
     assert len(result.download_paths) == 1
     assert result.download_paths[0].name == "geo2day_vatican_city.osm.pbf"
+
+
+def test_download_single_extract_reports_to_custom_progressbar() -> None:
+    """Test if a custom progress bar object receives the download progress."""
+    import functools
+    import http.server
+    import threading
+
+    from osmfinder.finder._download import _download_single_extract
+
+    class SpyProgressBar:
+        total: int | float | None = None
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, object]] = []
+
+        def set_description(self, description: str) -> None:
+            self.calls.append(("set_description", description))
+
+        def update(self, n: int) -> None:
+            self.calls.append(("update", n))
+
+        def reset(self) -> None:
+            self.calls.append(("reset", None))
+
+        def close(self) -> None:
+            self.calls.append(("close", None))
+
+    with tempfile.TemporaryDirectory() as tmp_dir_name:
+        served_directory = Path(tmp_dir_name) / "served"
+        served_directory.mkdir()
+        (served_directory / "extract.osm.pbf").write_bytes(b"x" * 10_000)
+        handler = functools.partial(
+            http.server.SimpleHTTPRequestHandler, directory=str(served_directory)
+        )
+        with http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            extract = OpenStreetMapExtract(
+                id="test_extract",
+                name="Test extract",
+                parent="test",
+                url=f"http://127.0.0.1:{server.server_port}/extract.osm.pbf",
+                geometry=box(0, 0, 1, 1),
+                file_name="test_extract",
+            )
+            progressbar = SpyProgressBar()
+            downloaded_path = _download_single_extract(
+                extract, Path(tmp_dir_name) / "downloads", progressbar=progressbar
+            )
+            server.shutdown()
+
+        assert downloaded_path.read_bytes() == b"x" * 10_000
+        assert progressbar.calls[0] == ("set_description", downloaded_path.name)
+        assert progressbar.total == 10_000
+        assert progressbar.calls[-3:] == [("reset", None), ("update", 10_000), ("close", None)]

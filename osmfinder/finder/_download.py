@@ -27,7 +27,7 @@ from osmfinder._results import (
     OsmfinderQueryResult,
     OsmfinderResult,
 )
-from osmfinder._typing import OpenStreetMapExtract, OsmExtractSourceLike
+from osmfinder._typing import OpenStreetMapExtract, OsmExtractSourceLike, ProgressBarLike
 from osmfinder.exceptions import (
     GeometryNotCoveredError,
     OsmExtractsUnavailableError,
@@ -41,7 +41,7 @@ from osmfinder.finder._query import find_extract_by_query
 def _download_single_extract(
     extract: OpenStreetMapExtract,
     download_directory: Path,
-    progressbar: bool = True,
+    progressbar: ProgressBarLike = True,
     force_refresh: bool = False,
 ) -> Path:
     """Download a single OSM extract as a PBF file."""
@@ -55,14 +55,21 @@ def _download_single_extract(
 
     download_directory.mkdir(parents=True, exist_ok=True)
 
+    if progressbar is True and FORCE_TERMINAL:
+        progressbar = False
+    if hasattr(progressbar, "set_description"):
+        progressbar.set_description(target_path.name)
+
     with tempfile.TemporaryDirectory(dir=download_directory) as tmp_dir:
         downloaded = retrieve(
             extract.url,
             fname=f"{extract.file_name}.osm.pbf",
             path=tmp_dir,
-            progressbar=progressbar and not FORCE_TERMINAL,
             known_hash=None,
-            downloader=HTTPDownloader(timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS),
+            # pooch ignores the `progressbar` argument of `retrieve` when a downloader is passed
+            downloader=HTTPDownloader(
+                timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, progressbar=progressbar
+            ),
         )
         shutil.move(downloaded, target_path)
 
@@ -72,7 +79,7 @@ def _download_single_extract(
 def _download_extracts_pbf_files(
     extracts: list[OpenStreetMapExtract],
     download_directory: Path,
-    progressbar: bool = True,
+    progressbar: ProgressBarLike = True,
     ignore_unavailable: bool = False,
     force_refresh: bool = False,
 ) -> tuple[list[tuple[OpenStreetMapExtract, Path]], list[OpenStreetMapExtract]]:
@@ -82,7 +89,8 @@ def _download_extracts_pbf_files(
     Args:
         extracts (list[OpenStreetMapExtract]): List of extracts to download.
         download_directory (Path): Directory where PBF files should be saved.
-        progressbar (bool, optional): Show progress bar. Defaults to True.
+        progressbar (ProgressBarLike, optional): Show a default progress bar (`True`), nothing
+            (`False`) or use a custom `ProgressBar` object. Defaults to True.
         ignore_unavailable (bool, optional): If `True`, network errors for a single extract
             are caught and the extract is reported as unavailable instead of raising.
             Defaults to `False`.
@@ -124,7 +132,7 @@ def download(
     source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
-    progressbar: bool = True,
+    progressbar: ProgressBarLike = True,
     force_refresh: bool = False,
     retry_on_unavailable: bool = True,
 ) -> OsmfinderDownloadResult: ...
@@ -136,7 +144,7 @@ def download(
     source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
-    progressbar: bool = True,
+    progressbar: ProgressBarLike = True,
     force_refresh: bool = False,
     retry_on_unavailable: bool = True,
 ) -> OsmfinderDownloadResult: ...
@@ -148,7 +156,7 @@ def download(
     source: OsmExtractSourceLike | None = None,
     *,
     download_directory: str | Path = "files",
-    progressbar: bool = True,
+    progressbar: ProgressBarLike = True,
     force_refresh: bool = False,
     retry_on_unavailable: bool = True,
 ) -> OsmfinderDownloadResult: ...
@@ -161,7 +169,7 @@ def download(
     *,
     download_directory: str | Path = "files",
     select_first_match: bool | None = None,
-    progressbar: bool = True,
+    progressbar: ProgressBarLike = True,
     force_refresh: bool = False,
 ) -> OsmfinderDownloadResult: ...
 
@@ -176,7 +184,7 @@ def download(
     allow_uncovered_geometry: bool | None = None,
     force_single_result: bool | None = None,
     single_result_iou_threshold: float | None = None,
-    progressbar: bool = True,
+    progressbar: ProgressBarLike = True,
     force_refresh: bool = False,
 ) -> OsmfinderDownloadResult: ...
 
@@ -191,7 +199,7 @@ def download(
     allow_uncovered_geometry: bool | None = None,
     force_single_result: bool | None = None,
     single_result_iou_threshold: float | None = None,
-    progressbar: bool = True,
+    progressbar: ProgressBarLike = True,
     force_refresh: bool = False,
     retry_on_unavailable: bool = True,
 ) -> OsmfinderDownloadResult:
@@ -239,7 +247,8 @@ def download(
             ``True``. Only used for geometry queries. Defaults to ``None``, in which case
             the value from ``query.config`` is used when ``query`` is an
             ``OsmfinderGeometryResult``, otherwise ``0.99``.
-        progressbar (bool): Show progress bar. Defaults to True.
+        progressbar (ProgressBarLike): Show a default progress bar (`True`), nothing
+            (`False`) or use a custom `ProgressBar` object. Defaults to True.
         force_refresh (bool): When ``True``, re-download even if the file already exists.
             Defaults to False.
         retry_on_unavailable (bool): When ``True``, unavailable extracts are excluded
@@ -437,7 +446,7 @@ def _download_with_retry_query(
     download_directory: Path,
     *,
     select_first_match: bool = True,
-    progressbar: bool = True,
+    progressbar: ProgressBarLike = True,
     force_refresh: bool = False,
 ) -> OsmfinderDownloadResult:
     """
@@ -453,7 +462,7 @@ def _download_with_retry_query(
         source: OSM source name.
         download_directory: Where to save files.
         select_first_match: When multiple extracts match, select the first one with a warning.
-        progressbar: Show progress bar.
+        progressbar: Show a progress bar (`True`/`False`) or use a custom `ProgressBar` object.
         force_refresh: Re-download existing files.
 
     Returns:
@@ -528,7 +537,7 @@ def _download_with_retry_geometry(
     allow_uncovered_geometry: bool = False,
     force_single_result: bool = False,
     single_result_iou_threshold: float = 0.99,
-    progressbar: bool = True,
+    progressbar: ProgressBarLike = True,
     force_refresh: bool = False,
 ) -> OsmfinderDownloadResult:
     """
@@ -547,7 +556,7 @@ def _download_with_retry_geometry(
         allow_uncovered_geometry: Suppress error if geometry parts aren't covered.
         force_single_result: Return only the single best extract.
         single_result_iou_threshold: Minimal IoU for selecting a single result.
-        progressbar: Show progress bar.
+        progressbar: Show a progress bar (`True`/`False`) or use a custom `ProgressBar` object.
         force_refresh: Re-download existing files.
 
     Returns:
