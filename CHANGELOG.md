@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-11-04
+
 ### Added
 
 - `progressbar` parameter accepts a custom progress bar object (`ProgressBar` protocol, same contract as in `pooch`), so other libraries can show downloads in their own progress displays.
@@ -71,7 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `find_smallest_containing_extracts`, `find_and_download_extracts_pbf_files`,
   `find_extracts_covering_point`, `display_available_extracts`, `clear_osm_index_cache`.
 
-[Unreleased]: https://github.com/RaczeQ/osmfinder/compare/1.2.1...HEAD
+[Unreleased]: https://github.com/RaczeQ/osmfinder/compare/1.2.2...HEAD
+
+[1.2.2]: https://github.com/RaczeQ/osmfinder/compare/1.2.1...1.2.2
 
 [1.2.1]: https://github.com/RaczeQ/osmfinder/compare/1.2.0...1.2.1
 
