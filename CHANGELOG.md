@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `progressbar` parameter accepts a custom progress bar object (`ProgressBar` protocol, same contract as in `pooch`), so other libraries can show downloads in their own progress displays.
+
+### Fixed
+
+- Download progress bar was never shown, because `pooch` ignores the `progressbar` argument when a custom downloader is passed.
+
 ## [1.2.1] - 2026-10-15
 
 ### Fixed
