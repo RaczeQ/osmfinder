@@ -212,22 +212,35 @@ def test_uncovered_geometry_extract(
 
 
 @pytest.mark.parametrize(
-    "uncovered_area,expected",
-    [(1.16, "98.84%"), (0.02, "99.98%"), (0.009, ">99.99%"), (1e-12, ">99.99%"), (100, "0.00%")],
+    "uncovered_percentage,expected",
+    [
+        (1.16, "covered 98.84% area"),
+        (0.02, "covered 99.98% area"),
+        (0.009, "covered >99.99% area"),
+        (1e-10, "covered >99.99% area"),
+        (100, "covered 0.00% area"),
+    ],
 )
-def test_format_covered_area(uncovered_area: float, expected: str) -> None:
+def test_format_covered_area(
+    mocker: MockerFixture, uncovered_percentage: float, expected: str
+) -> None:
     """Test if incomplete coverage is never shown as 100%."""
-    assert _format_covered_area(100, uncovered_area) == expected
+    mocker.patch(
+        "osmfinder.finder._covering.calculate_spherical_area", return_value=uncovered_percentage
+    )
+    assert _format_covered_area(100, box(0, 0, 1, 1)) == expected
 
 
-def test_uncovered_geometry_warning_shows_covered_area(mocker: MockerFixture) -> None:
-    """Test if the uncovered geometry warning reports the covered area."""
+def test_uncovered_geometry_warning_ignores_area_outside_of_geometry(
+    mocker: MockerFixture,
+) -> None:
+    """Test if the covered area counts only the part of an extract inside of the geometry."""
     index = _index_from_extracts(
-        [{"id": "a", "name": "A", "parent": "root", "geometry": box(0, 0, 1, 1)}]
+        [{"id": "a", "name": "A", "parent": "root", "geometry": box(1, -5, 5, 5)}]
     )
     mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
 
-    with pytest.warns(GeometryNotCoveredWarning, match=r"\(covered 50\.00% area\)"):
+    with pytest.warns(GeometryNotCoveredWarning, match=r" \(covered 50\.00% area\)\.$"):
         find_extracts_by_geometry(box(0, 0, 2, 1), "any", allow_uncovered_geometry=True)
 
 

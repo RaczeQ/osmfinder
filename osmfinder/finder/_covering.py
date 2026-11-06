@@ -240,7 +240,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
 
     ids = polygons_index.ids
     areas = polygons_index.areas
-    total_area = geometry_to_cover.area
+    total_area = calculate_spherical_area(geometry_to_cover)
 
     while not is_empty(geometry_to_cover):
         candidate_indices = polygons_index.tree.query(geometry_to_cover, predicate="intersects")
@@ -257,8 +257,8 @@ def _find_smallest_containing_extracts_for_single_geometry(
                     " or add `--allow-uncovered-geometry` flag to the CLI command."
                 )
             warnings.warn(
-                "Couldn't find extracts covering given geometry."
-                f" (covered {_format_covered_area(total_area, geometry_to_cover.area)} area)",
+                "Couldn't find extracts covering given geometry"
+                f" ({_format_covered_area(total_area, geometry_to_cover)}).",
                 GeometryNotCoveredWarning,
                 stacklevel=0,
             )
@@ -325,8 +325,8 @@ def _find_smallest_containing_extracts_for_single_geometry(
                 )
             warnings.warn(
                 f"Discarded {len(candidate_indices)} extracts with IoU below the "
-                f"threshold of {geometry_coverage_iou_threshold:.3g}."
-                f" (covered {_format_covered_area(total_area, geometry_to_cover.area)} area)",
+                f"threshold of {geometry_coverage_iou_threshold:.3g}"
+                f" ({_format_covered_area(total_area, geometry_to_cover)}).",
                 GeometryNotCoveredWarning,
                 stacklevel=0,
             )
@@ -335,10 +335,11 @@ def _find_smallest_containing_extracts_for_single_geometry(
     return selected_extracts_ids, steps
 
 
-def _format_covered_area(total_area: float, uncovered_area: float) -> str:
-    """Format the covered percentage, never showing 100% for incomplete coverage."""
-    covered_percentage = 100 * (1 - uncovered_area / total_area)
-    return ">99.99%" if covered_percentage > 99.99 else f"{covered_percentage:.2f}%"
+def _format_covered_area(total_area: float, uncovered_geometry: BaseGeometry) -> str:
+    """Format the covered area, never showing 100% for incomplete coverage."""
+    covered_percentage = 100 * (1 - calculate_spherical_area(uncovered_geometry) / total_area)
+    percentage = ">99.99%" if covered_percentage > 99.99 else f"{covered_percentage:.2f}%"
+    return f"covered {percentage} area"
 
 
 def _find_single_extract_for_geometry(
