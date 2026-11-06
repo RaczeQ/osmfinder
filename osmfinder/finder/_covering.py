@@ -117,6 +117,7 @@ def _find_smallest_containing_extracts(
         multiprocessing_activation_threshold = 100
 
     unique_extracts_ids: set[str] = set()
+    is_fully_covered = True
 
     geometries = _flatten_geometry(geometry)
 
@@ -134,7 +135,7 @@ def _find_smallest_containing_extracts(
         )
 
         all_steps: list[GeometryCoveringStep] = []
-        for i, (extract_ids_set, steps) in enumerate(
+        for i, (extract_ids_set, steps, is_covered) in enumerate(
             process_map(
                 find_extracts_func,
                 geometries,
@@ -145,19 +146,23 @@ def _find_smallest_containing_extracts(
             )
         ):
             unique_extracts_ids.update(extract_ids_set)
+            is_fully_covered &= is_covered
             for step in steps:
                 step.sub_polygon_index = i
             all_steps.extend(steps)
     else:
         all_steps = []
         for i, sub_geometry in enumerate(geometries):
-            extract_ids_set, steps = _find_smallest_containing_extracts_for_single_geometry(
-                geometry=sub_geometry,
-                polygons_index=polygons_index,
-                geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-                allow_uncovered_geometry=allow_uncovered_geometry,
+            extract_ids_set, steps, is_covered = (
+                _find_smallest_containing_extracts_for_single_geometry(
+                    geometry=sub_geometry,
+                    polygons_index=polygons_index,
+                    geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
+                    allow_uncovered_geometry=allow_uncovered_geometry,
+                )
             )
             unique_extracts_ids.update(extract_ids_set)
+            is_fully_covered &= is_covered
             for step in steps:
                 step.sub_polygon_index = i
             all_steps.extend(steps)
@@ -170,6 +175,11 @@ def _find_smallest_containing_extracts(
         multiprocessing_activation_threshold,
     )
 
+    if not is_fully_covered:
+        _warn_about_uncovered_geometry(
+            geometry, extracts_filtered, all_steps, geometry_coverage_iou_threshold
+        )
+
     return extracts_filtered, all_steps
 
 
@@ -178,7 +188,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
     polygons_index: OsmExtractsIndex,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
-) -> tuple[set[str], list[GeometryCoveringStep]]:
+) -> tuple[set[str], list[GeometryCoveringStep], bool]:
     """
     Find smallest set of extracts covering a given singular geometry.
 
@@ -203,7 +213,8 @@ def _find_smallest_containing_extracts_for_single_geometry(
         ValueError: If geometry_coverage_iou_threshold is outside bounds [0, 1].
 
     Returns:
-        Set[str]: Selected extract index string values.
+        tuple[set[str], list[GeometryCoveringStep], bool]: Selected extract index string values,
+            covering steps and whether the geometry is fully covered.
     """
     if polygons_index is None:
         raise RuntimeError("Extracts index is empty.")
@@ -236,11 +247,10 @@ def _find_smallest_containing_extracts_for_single_geometry(
                 intersection_geometry=geometry_to_cover,
             )
         )
-        return selected_extracts_ids, steps
+        return selected_extracts_ids, steps, True
 
     ids = polygons_index.ids
     areas = polygons_index.areas
-    total_area = calculate_spherical_area(geometry_to_cover)
 
     while not is_empty(geometry_to_cover):
         candidate_indices = polygons_index.tree.query(geometry_to_cover, predicate="intersects")
@@ -256,12 +266,6 @@ def _find_smallest_containing_extracts_for_single_geometry(
                     " the `allow_uncovered_geometry=True` argument"
                     " or add `--allow-uncovered-geometry` flag to the CLI command."
                 )
-            warnings.warn(
-                "Couldn't find extracts covering given geometry"
-                f" ({_format_covered_area(total_area, geometry_to_cover)}).",
-                GeometryNotCoveredWarning,
-                stacklevel=0,
-            )
             break
 
         candidate_sort_areas = np.array([float(areas[idx]) for idx in candidate_indices])
@@ -323,23 +327,38 @@ def _find_smallest_containing_extracts_for_single_geometry(
                         intersection_geometry=intersection_geometries[i],
                     )
                 )
-            warnings.warn(
-                f"Discarded {len(candidate_indices)} extracts with IoU below the "
-                f"threshold of {geometry_coverage_iou_threshold:.3g}"
-                f" ({_format_covered_area(total_area, geometry_to_cover)}).",
-                GeometryNotCoveredWarning,
-                stacklevel=0,
-            )
             break
 
-    return selected_extracts_ids, steps
+    return selected_extracts_ids, steps, is_empty(geometry_to_cover)
 
 
-def _format_covered_area(total_area: float, uncovered_geometry: BaseGeometry) -> str:
-    """Format the covered area, never showing 100% for incomplete coverage."""
-    covered_percentage = 100 * (1 - calculate_spherical_area(uncovered_geometry) / total_area)
-    percentage = ">99.99%" if covered_percentage > 99.99 else f"{covered_percentage:.2f}%"
-    return f"covered {percentage} area"
+def _warn_about_uncovered_geometry(
+    geometry: BaseGeometry,
+    extracts: list[OpenStreetMapExtract],
+    steps: list[GeometryCoveringStep],
+    geometry_coverage_iou_threshold: float,
+) -> None:
+    discarded = sum(step.reason == "low_iou" for step in steps)
+    message = (
+        f"Discarded {discarded} extracts with IoU below the"
+        f" threshold of {geometry_coverage_iou_threshold:.3g}"
+        if discarded
+        else "Couldn't find extracts covering given geometry"
+    )
+    total_area = calculate_spherical_area(geometry)
+    if total_area > 0:
+        uncovered_geometry = geometry.difference(unary_union([e.geometry for e in extracts]))
+        covered_area = _format_covered_area(
+            total_area, calculate_spherical_area(uncovered_geometry)
+        )
+        message = f"{message} (covered {covered_area} area)"
+    warnings.warn(f"{message}.", GeometryNotCoveredWarning, stacklevel=0)
+
+
+def _format_covered_area(total_area: float, uncovered_area: float) -> str:
+    """Format the covered percentage, never showing 100% for incomplete coverage."""
+    covered_percentage = 100 * (1 - uncovered_area / total_area)
+    return ">99.99%" if covered_percentage > 99.99 else f"{covered_percentage:.2f}%"
 
 
 def _find_single_extract_for_geometry(

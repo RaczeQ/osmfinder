@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from pytest_mock import MockerFixture
 from rq_geo_toolkit.geocode import geocode_to_geometry
-from shapely import box, from_wkt
+from shapely import MultiPolygon, box, from_wkt
 from shapely.geometry import mapping
 
 from osmfinder._typing import OsmExtractSource
@@ -212,23 +212,26 @@ def test_uncovered_geometry_extract(
 
 
 @pytest.mark.parametrize(
-    "uncovered_percentage,expected",
-    [
-        (1.16, "covered 98.84% area"),
-        (0.02, "covered 99.98% area"),
-        (0.009, "covered >99.99% area"),
-        (1e-10, "covered >99.99% area"),
-        (100, "covered 0.00% area"),
-    ],
+    "uncovered_area,expected",
+    [(1.16, "98.84%"), (0.02, "99.98%"), (0.009, ">99.99%"), (1e-12, ">99.99%"), (100, "0.00%")],
 )
-def test_format_covered_area(
-    mocker: MockerFixture, uncovered_percentage: float, expected: str
-) -> None:
+def test_format_covered_area(uncovered_area: float, expected: str) -> None:
     """Test if incomplete coverage is never shown as 100%."""
-    mocker.patch(
-        "osmfinder.finder._covering.calculate_spherical_area", return_value=uncovered_percentage
+    assert _format_covered_area(100, uncovered_area) == expected
+
+
+def test_multipart_geometry_has_single_warning_with_total_coverage(mocker: MockerFixture) -> None:
+    """Test if a multipart geometry gets one warning about coverage of all of its parts."""
+    index = _index_from_extracts(
+        [{"id": "a", "name": "A", "parent": "root", "geometry": box(0, 0, 1, 1)}]
     )
-    assert _format_covered_area(100, box(0, 0, 1, 1)) == expected
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    geometry = MultiPolygon([box(0, 0, 1, 1), box(2, 0, 3, 1)])
+
+    with pytest.warns(GeometryNotCoveredWarning, match=r"\(covered 50\.00% area\)\.$") as caught:
+        find_extracts_by_geometry(geometry, "any", allow_uncovered_geometry=True)
+
+    assert len(caught) == 1
 
 
 def test_uncovered_geometry_warning_ignores_area_outside_of_geometry(
