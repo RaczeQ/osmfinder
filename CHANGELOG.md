@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Added the covered area percentage to the `GeometryNotCoveredWarning` messages.
+
+### Fixed
+
+- `GeometryNotCoveredWarning` is emitted once for the whole geometry instead of once per part of a multipart geometry.
+
 ## [1.2.2] - 2026-11-04
 
 ### Added

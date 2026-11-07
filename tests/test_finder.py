@@ -1,12 +1,13 @@
 """Tests for finding extracts by name, geometry and source resolution."""
 
+import warnings
 from contextlib import nullcontext as does_not_raise
 from typing import Any
 
 import pytest
 from pytest_mock import MockerFixture
 from rq_geo_toolkit.geocode import geocode_to_geometry
-from shapely import box, from_wkt
+from shapely import MultiPolygon, box, from_wkt
 from shapely.geometry import mapping
 
 from osmfinder._typing import OsmExtractSource
@@ -26,6 +27,7 @@ from osmfinder.finder import (
     find_extracts_by_geometry,
     find_extracts_covering_point,
 )
+from osmfinder.finder._covering import _format_covered_area
 from tests._helpers import _index_from_extracts, _index_from_records
 
 
@@ -208,6 +210,63 @@ def test_uncovered_geometry_extract(
             allow_uncovered_geometry=allow_uncovered_geometry,
             geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
         )
+
+
+@pytest.mark.parametrize(
+    "uncovered_area,expected",
+    [(1.16, "98.84%"), (0.02, "99.98%"), (0.009, ">99.99%"), (1e-12, ">99.99%"), (100, "0.00%")],
+)
+def test_format_covered_area(uncovered_area: float, expected: str) -> None:
+    """Test if incomplete coverage is never shown as 100%."""
+    assert _format_covered_area(100, uncovered_area) == expected
+
+
+def test_multipart_geometry_has_single_warning_with_total_coverage(mocker: MockerFixture) -> None:
+    """Test if a multipart geometry gets one warning about coverage of all of its parts."""
+    index = _index_from_extracts(
+        [{"id": "a", "name": "A", "parent": "root", "geometry": box(0, 0, 1, 1)}]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    geometry = MultiPolygon([box(0, 0, 1, 1), box(2, 0, 3, 1)])
+
+    with pytest.warns(GeometryNotCoveredWarning, match=r"\(covered 50\.00% area\)\.$") as caught:
+        find_extracts_by_geometry(geometry, "any", allow_uncovered_geometry=True)
+
+    assert len(caught) == 1
+
+
+def test_no_warning_when_part_is_covered_by_extract_of_another_part(
+    mocker: MockerFixture,
+) -> None:
+    """Test if coverage is checked on the final extracts, not separately for each part."""
+    index = _index_from_extracts(
+        [
+            {"id": "small", "name": "Small", "parent": "root", "geometry": box(0, 0, 0.5, 1)},
+            {"id": "large", "name": "Large", "parent": "root", "geometry": box(0, 0, 10, 10)},
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    # the first part discards `large` because of its low IoU, the second one selects it
+    geometry = MultiPolygon([box(0, 0, 1, 1), box(1, 1, 10, 10)])
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", GeometryNotCoveredWarning)
+        result = find_extracts_by_geometry(geometry, "any", allow_uncovered_geometry=True)
+
+    assert [extract.id for extract in result.extracts] == ["large"]
+
+
+def test_uncovered_geometry_warning_ignores_area_outside_of_geometry(
+    mocker: MockerFixture,
+) -> None:
+    """Test if the covered area counts only the part of an extract inside of the geometry."""
+    index = _index_from_extracts(
+        [{"id": "a", "name": "A", "parent": "root", "geometry": box(1, -5, 5, 5)}]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    with pytest.warns(GeometryNotCoveredWarning, match=r" \(covered 50\.00% area\)\.$"):
+        find_extracts_by_geometry(box(0, 0, 2, 1), "any", allow_uncovered_geometry=True)
 
 
 def test_excluded_extracts_ids() -> None:
