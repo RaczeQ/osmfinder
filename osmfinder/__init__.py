@@ -3,9 +3,10 @@ osmfinder.
 
 Find and download publicly available OpenStreetMap `*.osm.pbf` extracts by name, id or geometry.
 
-The library wraps several public extract providers (Geofabrik, BBBike, OpenStreetMap.fr, Movisda,
-GEO2day) behind a single API. It can look up an extract by a text query, or find the smallest set of
-extracts covering an arbitrary geometry, and download the matching `*.osm.pbf` files.
+The library wraps several public extract providers (Geofabrik, BBBike cities and regions,
+OpenStreetMap.fr, Movisda, GEO2day) behind a single API. It can look up an extract by a text query,
+or find the smallest set of extracts covering an arbitrary geometry, and download the matching
+`*.osm.pbf` files.
 """
 
 from osmfinder._results import (

@@ -9,6 +9,7 @@ from shapely import box
 from shapely.geometry import mapping
 from shapely.geometry.base import BaseGeometry
 
+from osmfinder.parsers.bbbike_json import parse_bbbike_json, parse_bbbike_json_file
 from osmfinder.parsers.geojson import parse_geojson, parse_geojson_file
 from osmfinder.parsers.poly import parse_polygon_file
 
@@ -69,4 +70,39 @@ def test_parse_polygon_file_404_returns_none_and_warns(mocker: MockerFixture) ->
 
     with pytest.warns(UserWarning, match=f"Resource not found \\(404\\): {url}"):
         result = parse_polygon_file(url)
+    assert result is None
+
+
+def test_parse_bbbike_json() -> None:
+    """Test if BBBike [lat, lon] polygons with holes are parsed and overlapping parts merged."""
+    data = [
+        # Polygon with a hole.
+        [
+            [[0, 0], [0, 4], [4, 4], [4, 0], [0, 0]],
+            [[1, 1], [1, 2], [2, 2], [2, 1], [1, 1]],
+        ],
+        # Separate polygon (latitude 10-11, longitude 20-22).
+        [[[10, 20], [10, 22], [11, 22], [11, 20], [10, 20]]],
+        # Polygon fully inside the second one.
+        [[[10.2, 20.2], [10.2, 20.5], [10.5, 20.5], [10.5, 20.2], [10.2, 20.2]]],
+    ]
+    expected_geometry = box(0, 0, 4, 4).difference(box(1, 1, 2, 2)).union(box(20, 10, 22, 11))
+
+    parsed_geometry = parse_bbbike_json(data)
+
+    assert parsed_geometry.is_valid
+    assert parsed_geometry.equals(expected_geometry)
+
+
+def test_parse_bbbike_json_file_404_returns_none_and_warns(mocker: MockerFixture) -> None:
+    """Test if parse_bbbike_json_file returns None and warns on 404."""
+    url = "https://example.com/missing.json"
+    response = mocker.Mock()
+    response.status_code = 404
+    response.raise_for_status = mocker.Mock(side_effect=HTTPError(response=response))
+
+    mocker.patch("osmfinder._network.requests.get", return_value=response)
+
+    with pytest.warns(UserWarning, match=f"Resource not found \\(404\\): {url}"):
+        result = parse_bbbike_json_file(url)
     assert result is None

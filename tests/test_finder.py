@@ -42,6 +42,7 @@ from tests._helpers import _index_from_extracts, _index_from_records
             "any",
             [
                 OsmExtractSource.bbbike,
+                OsmExtractSource.bbbike_region,
                 OsmExtractSource.geofabrik,
                 OsmExtractSource.osm_fr,
                 OsmExtractSource.geo2day,
@@ -62,6 +63,7 @@ from tests._helpers import _index_from_extracts, _index_from_records
             [
                 OsmExtractSource.geofabrik,
                 OsmExtractSource.bbbike,
+                OsmExtractSource.bbbike_region,
                 OsmExtractSource.osm_fr,
                 OsmExtractSource.geo2day,
                 OsmExtractSource.movisda_admin,
@@ -421,6 +423,7 @@ def test_select_first_match(mocker: MockerFixture) -> None:
                 "movisda-admin_poland",
                 "geo2day_europe_poland",
                 "osmfr_europe_poland",
+                "bbbike-region_europe_poland",
                 "geofabrik_europe_poland",
             ],
         ),

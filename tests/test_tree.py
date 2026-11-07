@@ -18,6 +18,7 @@ from tests._helpers import _index_from_records
     [
         (OsmExtractSource.geofabrik, False),
         (OsmExtractSource.bbbike, False),
+        (OsmExtractSource.bbbike_region, False),
         (OsmExtractSource.osm_fr, False),
         (OsmExtractSource.geo2day, False),
         (OsmExtractSource.movisda_admin, False),

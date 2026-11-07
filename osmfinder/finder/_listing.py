@@ -73,8 +73,9 @@ def get_available_extracts(
 
     Args:
         source (OsmExtractSourceLike): OSM source name. Can be one of: 'any', 'Geofabrik',
-            'BBBike', 'osmfr', 'GEO2Day', 'Movisda-admin', 'Movisda-grid', or an iterable /
-            comma-separated string of those (e.g. ['BBBike', 'osmfr'] or 'bbbike,osmfr').
+            'BBBike', 'BBBike-region', 'osmfr', 'GEO2Day', 'Movisda-admin', 'Movisda-grid', or an
+            iterable / comma-separated string of those (e.g. ['BBBike', 'osmfr'] or
+            'bbbike,osmfr').
             Defaults to 'any'.
         excluded_extracts_ids (set[str] | None): Set of extract ids to exclude from the
             result. Useful for skipping extracts that are unavailable. Defaults to `None`.

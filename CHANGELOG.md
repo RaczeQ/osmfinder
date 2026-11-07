@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `BBBike-region` source with the regional extracts from [BBBike](https://data.bbbike.org/osm/region/), parsed from their boundary JSON files.
+
 ## [1.2.3] - 2026-11-07
 
 ### Changed

@@ -33,6 +33,8 @@ def test_public_api_exposed() -> None:
         ("GEOFABRIK", OsmExtractSource.geofabrik),
         ("BBBike", OsmExtractSource.bbbike),
         ("bbbike", OsmExtractSource.bbbike),
+        ("BBBike-region", OsmExtractSource.bbbike_region),
+        ("bbbike-region", OsmExtractSource.bbbike_region),
         ("osmfr", OsmExtractSource.osm_fr),
         ("OSMFR", OsmExtractSource.osm_fr),
         ("GEO2Day", OsmExtractSource.geo2day),
