@@ -117,7 +117,6 @@ def _find_smallest_containing_extracts(
         multiprocessing_activation_threshold = 100
 
     unique_extracts_ids: set[str] = set()
-    is_fully_covered = True
 
     geometries = _flatten_geometry(geometry)
 
@@ -135,7 +134,7 @@ def _find_smallest_containing_extracts(
         )
 
         all_steps: list[GeometryCoveringStep] = []
-        for i, (extract_ids_set, steps, is_covered) in enumerate(
+        for i, (extract_ids_set, steps) in enumerate(
             process_map(
                 find_extracts_func,
                 geometries,
@@ -146,23 +145,19 @@ def _find_smallest_containing_extracts(
             )
         ):
             unique_extracts_ids.update(extract_ids_set)
-            is_fully_covered &= is_covered
             for step in steps:
                 step.sub_polygon_index = i
             all_steps.extend(steps)
     else:
         all_steps = []
         for i, sub_geometry in enumerate(geometries):
-            extract_ids_set, steps, is_covered = (
-                _find_smallest_containing_extracts_for_single_geometry(
-                    geometry=sub_geometry,
-                    polygons_index=polygons_index,
-                    geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
-                    allow_uncovered_geometry=allow_uncovered_geometry,
-                )
+            extract_ids_set, steps = _find_smallest_containing_extracts_for_single_geometry(
+                geometry=sub_geometry,
+                polygons_index=polygons_index,
+                geometry_coverage_iou_threshold=geometry_coverage_iou_threshold,
+                allow_uncovered_geometry=allow_uncovered_geometry,
             )
             unique_extracts_ids.update(extract_ids_set)
-            is_fully_covered &= is_covered
             for step in steps:
                 step.sub_polygon_index = i
             all_steps.extend(steps)
@@ -175,10 +170,9 @@ def _find_smallest_containing_extracts(
         multiprocessing_activation_threshold,
     )
 
-    if not is_fully_covered:
-        _warn_about_uncovered_geometry(
-            geometry, extracts_filtered, all_steps, geometry_coverage_iou_threshold
-        )
+    _warn_about_uncovered_geometry(
+        geometry, extracts_filtered, all_steps, geometry_coverage_iou_threshold
+    )
 
     return extracts_filtered, all_steps
 
@@ -188,7 +182,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
     polygons_index: OsmExtractsIndex,
     geometry_coverage_iou_threshold: float = 0.01,
     allow_uncovered_geometry: bool = False,
-) -> tuple[set[str], list[GeometryCoveringStep], bool]:
+) -> tuple[set[str], list[GeometryCoveringStep]]:
     """
     Find smallest set of extracts covering a given singular geometry.
 
@@ -213,8 +207,8 @@ def _find_smallest_containing_extracts_for_single_geometry(
         ValueError: If geometry_coverage_iou_threshold is outside bounds [0, 1].
 
     Returns:
-        tuple[set[str], list[GeometryCoveringStep], bool]: Selected extract index string values,
-            covering steps and whether the geometry is fully covered.
+        tuple[set[str], list[GeometryCoveringStep]]: Selected extract index string values
+            and covering steps.
     """
     if polygons_index is None:
         raise RuntimeError("Extracts index is empty.")
@@ -226,10 +220,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
     checked_extracts_ids: set[str] = set()
     steps: list[GeometryCoveringStep] = []
 
-    if geometry.geom_type == "Polygon":
-        geometry_to_cover = cast("BaseGeometry", geometry.buffer(0))
-    else:
-        geometry_to_cover = cast("BaseGeometry", geometry.buffer(1e-6))
+    geometry_to_cover = _get_geometry_to_cover(geometry)
 
     exactly_matching_mask = equals_exact(polygons_index.geometries, geometry, tolerance=1e-6)
     if np.count_nonzero(exactly_matching_mask) == 1:
@@ -247,7 +238,7 @@ def _find_smallest_containing_extracts_for_single_geometry(
                 intersection_geometry=geometry_to_cover,
             )
         )
-        return selected_extracts_ids, steps, True
+        return selected_extracts_ids, steps
 
     ids = polygons_index.ids
     areas = polygons_index.areas
@@ -329,7 +320,12 @@ def _find_smallest_containing_extracts_for_single_geometry(
                 )
             break
 
-    return selected_extracts_ids, steps, is_empty(geometry_to_cover)
+    return selected_extracts_ids, steps
+
+
+def _get_geometry_to_cover(geometry: BaseGeometry) -> BaseGeometry:
+    distance = 0 if geometry.geom_type == "Polygon" else 1e-6
+    return cast("BaseGeometry", geometry.buffer(distance))
 
 
 def _warn_about_uncovered_geometry(
@@ -338,6 +334,16 @@ def _warn_about_uncovered_geometry(
     steps: list[GeometryCoveringStep],
     geometry_coverage_iou_threshold: float,
 ) -> None:
+    selected_area = unary_union([e.geometry for e in extracts])
+    uncovered_geometry = unary_union(
+        [
+            _get_geometry_to_cover(part).difference(selected_area)
+            for part in _flatten_geometry(geometry)
+        ]
+    )
+    if is_empty(uncovered_geometry):
+        return
+
     discarded = sum(step.reason == "low_iou" for step in steps)
     message = (
         f"Discarded {discarded} extracts with IoU below the"
@@ -347,7 +353,6 @@ def _warn_about_uncovered_geometry(
     )
     total_area = calculate_spherical_area(geometry)
     if total_area > 0:
-        uncovered_geometry = geometry.difference(unary_union([e.geometry for e in extracts]))
         covered_area = _format_covered_area(
             total_area, calculate_spherical_area(uncovered_geometry)
         )
@@ -554,10 +559,7 @@ def _filter_extracts_for_single_geometry(
     """
     filtered_extracts_ids: set[str] = set()
 
-    if geometry.geom_type == "Polygon":
-        geometry_to_cover = geometry.buffer(0)
-    else:
-        geometry_to_cover = geometry.buffer(1e-6)
+    geometry_to_cover = _get_geometry_to_cover(geometry)
 
     for idx in range(len(sorted_extracts.ids)):
         if is_empty(geometry_to_cover):

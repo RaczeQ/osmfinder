@@ -1,5 +1,6 @@
 """Tests for finding extracts by name, geometry and source resolution."""
 
+import warnings
 from contextlib import nullcontext as does_not_raise
 from typing import Any
 
@@ -232,6 +233,27 @@ def test_multipart_geometry_has_single_warning_with_total_coverage(mocker: Mocke
         find_extracts_by_geometry(geometry, "any", allow_uncovered_geometry=True)
 
     assert len(caught) == 1
+
+
+def test_no_warning_when_part_is_covered_by_extract_of_another_part(
+    mocker: MockerFixture,
+) -> None:
+    """Test if coverage is checked on the final extracts, not separately for each part."""
+    index = _index_from_extracts(
+        [
+            {"id": "small", "name": "Small", "parent": "root", "geometry": box(0, 0, 0.5, 1)},
+            {"id": "large", "name": "Large", "parent": "root", "geometry": box(0, 0, 10, 10)},
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    # the first part discards `large` because of its low IoU, the second one selects it
+    geometry = MultiPolygon([box(0, 0, 1, 1), box(1, 1, 10, 10)])
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", GeometryNotCoveredWarning)
+        result = find_extracts_by_geometry(geometry, "any", allow_uncovered_geometry=True)
+
+    assert [extract.id for extract in result.extracts] == ["large"]
 
 
 def test_uncovered_geometry_warning_ignores_area_outside_of_geometry(
