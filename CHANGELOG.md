@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-11-07
+
 ### Changed
 
 - Added the covered area percentage to the `GeometryNotCoveredWarning` messages.
@@ -81,7 +83,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `find_smallest_containing_extracts`, `find_and_download_extracts_pbf_files`,
   `find_extracts_covering_point`, `display_available_extracts`, `clear_osm_index_cache`.
 
-[Unreleased]: https://github.com/RaczeQ/osmfinder/compare/1.2.2...HEAD
+[Unreleased]: https://github.com/RaczeQ/osmfinder/compare/1.2.3...HEAD
+
+[1.2.3]: https://github.com/RaczeQ/osmfinder/compare/1.2.2...1.2.3
 
 [1.2.2]: https://github.com/RaczeQ/osmfinder/compare/1.2.1...1.2.2
 
