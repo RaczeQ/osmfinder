@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-07
+
 ### Added
 
 - `BBBike-region` source with the regional extracts from [BBBike](https://data.bbbike.org/osm/region/), parsed from their boundary JSON files.
@@ -87,7 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `find_smallest_containing_extracts`, `find_and_download_extracts_pbf_files`,
   `find_extracts_covering_point`, `display_available_extracts`, `clear_osm_index_cache`.
 
-[Unreleased]: https://github.com/RaczeQ/osmfinder/compare/1.2.3...HEAD
+[Unreleased]: https://github.com/RaczeQ/osmfinder/compare/1.3.0...HEAD
+
+[1.3.0]: https://github.com/RaczeQ/osmfinder/compare/1.2.3...1.3.0
 
 [1.2.3]: https://github.com/RaczeQ/osmfinder/compare/1.2.2...1.2.3
 
