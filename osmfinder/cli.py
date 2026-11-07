@@ -82,7 +82,7 @@ def list_cmd(
             "-s",
             help=(
                 "Source of extracts to display. Can be one of: 'any', 'Geofabrik', 'BBBike',"
-                " 'osmfr', 'GEO2Day', 'Movisda-admin', 'Movisda-grid'."
+                " 'BBBike-region', 'osmfr', 'GEO2Day', 'Movisda-admin', 'Movisda-grid'."
             ),
         ),
     ] = "any",
@@ -275,9 +275,9 @@ def search_cmd(
             "--source",
             "-s",
             help=(
-                "Source(s) to search. Can be one of: 'any', 'Geofabrik', 'BBBike', 'osmfr',"
-                " 'GEO2Day', 'Movisda-admin', 'Movisda-grid', or a comma-separated combination"
-                " (e.g. 'bbbike,osmfr')."
+                "Source(s) to search. Can be one of: 'any', 'Geofabrik', 'BBBike',"
+                " 'BBBike-region', 'osmfr', 'GEO2Day', 'Movisda-admin', 'Movisda-grid', or a"
+                " comma-separated combination (e.g. 'bbbike,osmfr')."
             ),
             show_default=True,
         ),
@@ -407,9 +407,9 @@ def covers_cmd(
             "--source",
             "-s",
             help=(
-                "Source(s) to search. Can be one of: 'any', 'Geofabrik', 'BBBike', 'osmfr',"
-                " 'GEO2Day', 'Movisda-admin', 'Movisda-grid', or a comma-separated combination"
-                " (e.g. 'bbbike,osmfr')."
+                "Source(s) to search. Can be one of: 'any', 'Geofabrik', 'BBBike',"
+                " 'BBBike-region', 'osmfr', 'GEO2Day', 'Movisda-admin', 'Movisda-grid', or a"
+                " comma-separated combination (e.g. 'bbbike,osmfr')."
             ),
             show_default=True,
         ),

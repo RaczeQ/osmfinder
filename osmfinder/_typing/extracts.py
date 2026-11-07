@@ -35,6 +35,7 @@ class OsmExtractSource(str, Enum):
     geofabrik = "Geofabrik"
     osm_fr = "osmfr"
     bbbike = "BBBike"
+    bbbike_region = "BBBike-region"
     geo2day = "GEO2Day"
     movisda_admin = "Movisda-admin"
     movisda_grid = "Movisda-grid"

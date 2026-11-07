@@ -6,7 +6,8 @@ Find and download publicly available OpenStreetMap `*.osm.pbf` extracts by **nam
 **geometry**.
 
 `osmfinder` wraps several public extract providers behind a single API:
-[Geofabrik](https://download.geofabrik.de/), [BBBike](https://download.bbbike.org/osm/bbbike/),
+[Geofabrik](https://download.geofabrik.de/), [BBBike](https://download.bbbike.org/osm/bbbike/)
+(cities and [regions](https://data.bbbike.org/osm/region/)),
 [OpenStreetMap.fr](https://download.openstreetmap.fr/), [Movisda](https://osm.download.movisda.io/)
 and [GEO2day](https://geo2day.com/). It can look up an extract by a text query, or find the
 smallest set of extracts covering an arbitrary geometry, and download the matching `*.osm.pbf`
@@ -156,7 +157,7 @@ osmfinder clear
 ### Sources
 
 The `source` argument accepts a single value, an iterable, or a comma-separated string. Available
-values: `any`, `Geofabrik`, `BBBike`, `osmfr`, `GEO2Day`, `Movisda-admin`, `Movisda-grid`.
+values: `any`, `Geofabrik`, `BBBike`, `BBBike-region`, `osmfr`, `GEO2Day`, `Movisda-admin`, `Movisda-grid`.
 
 ```python
 osmfinder.find_extract_by_query("Berlin", ["Geofabrik", "BBBike"])

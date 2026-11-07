@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 from osmfinder._typing import OsmExtractSource
 from osmfinder.sources.bbbike import BBBIKE_EXTRACTS_INDEX_URL
+from osmfinder.sources.bbbike_region import BBBIKE_REGION_PBF_INDEX_URL
 from osmfinder.sources.geo2day import _find_subregion_links
 from osmfinder.sources.geofabrik import _parse_geofabrik_index
 from osmfinder.sources.movisda import (
@@ -276,6 +277,56 @@ def test_bbbike_iterate_index(mocker: MockerFixture) -> None:
     assert by_id["BBBike_Aachen"].geometry.equals(box(6.0, 50.7, 6.2, 50.9))
     # Berlin uses the CSV bounding box fallback.
     assert by_id["BBBike_Berlin"].geometry.equals(box(13.0, 52.3, 13.8, 52.7))
+
+
+def test_bbbike_region_gather_and_parse(mocker: MockerFixture) -> None:
+    """Test if BBBike region PBF directories are walked and regions without a boundary skipped."""
+    import osmfinder.sources.bbbike_region as bbbike_region_module
+
+    def listing(*hrefs: str) -> str:
+        rows = "".join(f'<tr><td class="n"><a href="{href}">{href}</a></td></tr>' for href in hrefs)
+        return f"<table>{rows}</table>"
+
+    listings = {
+        f"{BBBIKE_REGION_PBF_INDEX_URL}/": listing("../", "europe/"),
+        f"{BBBIKE_REGION_PBF_INDEX_URL}/europe/": listing(
+            "../", "germany/", "germany.osm.pbf", "germany.osm.pbf.md5", "monaco.osm.pbf"
+        ),
+        f"{BBBIKE_REGION_PBF_INDEX_URL}/europe/germany/": listing("../", "berlin.osm.pbf"),
+    }
+
+    def fake_get(url: str, headers: Any = None, timeout: Any = None) -> Any:
+        response = mocker.Mock()
+        response.status_code = 200
+        response.raise_for_status = lambda: None
+        response.text = listings[url]
+        return response
+
+    def fake_boundary(url: str) -> Any:
+        # Monaco has no boundary file.
+        return None if "monaco" in url else box(0, 0, 1, 1)
+
+    mocker.patch("osmfinder._network.requests.get", side_effect=fake_get)
+    boundary_mock = mocker.patch.object(
+        bbbike_region_module, "parse_bbbike_json_file", side_effect=fake_boundary
+    )
+
+    with tqdm(disable=True) as pbar:
+        region_paths = bbbike_region_module._gather_bbbike_region_paths("", pbar)
+        assert pbar.total == 3
+        extracts = bbbike_region_module._parse_bbbike_region_paths(region_paths, pbar)
+
+    assert sorted(region_paths) == ["europe/germany", "europe/germany/berlin", "europe/monaco"]
+    by_id = {extract.id: extract for extract in extracts}
+    assert set(by_id) == {"BBBike-region_europe_germany", "BBBike-region_europe_germany_berlin"}
+    berlin = by_id["BBBike-region_europe_germany_berlin"]
+    assert berlin.name == "berlin"
+    assert berlin.parent == "BBBike-region_europe_germany"
+    assert berlin.url == "https://data.bbbike.org/osm/pbf/region/europe/germany/berlin.osm.pbf"
+    assert by_id["BBBike-region_europe_germany"].parent == "BBBike-region_europe"
+    boundary_mock.assert_any_call(
+        "https://data.bbbike.org/osm/region/europe/germany/berlin/berlin.json"
+    )
 
 
 def test_osm_fr_gather_and_parse(mocker: MockerFixture) -> None:
