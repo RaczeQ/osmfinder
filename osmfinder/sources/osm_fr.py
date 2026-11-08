@@ -4,7 +4,6 @@ OpenStreetMap.fr extracts.
 This module contains wrapper for publically available OpenStreetMap.fr download server.
 """
 
-import re
 import warnings
 from typing import Any
 
@@ -80,26 +79,25 @@ def _gather_all_openstreetmap_fr_urls(
             )
             return []
         raise
-    soup = BeautifulSoup(result.text, "html.parser")
+    # Works with both table (Apache) and plain `<pre>` (nginx) directory listings.
+    hrefs = [
+        link["href"] for link in BeautifulSoup(result.text, "html.parser").find_all("a", href=True)
+    ]
 
-    extracts_urls = soup.find_all(string=re.compile("-latest\\.osm\\.pbf$"))
-    pbar.total = (pbar.total or 0) + len(extracts_urls)
+    extracts_hrefs = [href for href in hrefs if href.endswith("-latest.osm.pbf")]
+    pbar.total = (pbar.total or 0) + len(extracts_hrefs)
     pbar.refresh()
-    extract_soup_objects.extend(
-        [(extract_url, id_prefix, directory_url) for extract_url in extracts_urls]
-    )
+    extract_soup_objects.extend([(href, id_prefix, directory_url) for href in extracts_hrefs])
 
-    directories = soup.find_all(src="/icons/folder.gif")
-    for directory in directories:
-        link = directory.find_parent("tr").find("a")
-        name = link.text.replace("/", "")
-        extract_soup_objects.extend(
-            _gather_all_openstreetmap_fr_urls(
-                id_prefix=f"{id_prefix}_{name}",
-                directory_url=f"{directory_url}{link['href']}",
-                pbar=pbar,
+    for href in hrefs:
+        if href.endswith("/") and not href.startswith(("..", "/", "?")):
+            extract_soup_objects.extend(
+                _gather_all_openstreetmap_fr_urls(
+                    id_prefix=f"{id_prefix}_{href.removesuffix('/')}",
+                    directory_url=f"{directory_url}{href}",
+                    pbar=pbar,
+                )
             )
-        )
 
     return extract_soup_objects
 
@@ -109,9 +107,8 @@ def _parse_openstreetmap_fr_urls(
 ) -> list[OpenStreetMapExtract]:
     extracts = []
 
-    for soup_object, id_prefix, directory_url in extract_soup_objects:
-        link = soup_object.find_parent("tr").find("a")
-        name = link.text.replace("-latest.osm.pbf", "")
+    for href, id_prefix, directory_url in extract_soup_objects:
+        name = href.removesuffix("-latest.osm.pbf")
         polygon = parse_polygon_file(
             f"{OPENSTREETMAP_FR_POLYGONS_INDEX_URL}/{directory_url}{name}.poly"
         )
@@ -122,7 +119,7 @@ def _parse_openstreetmap_fr_urls(
                 id=f"{id_prefix}_{name}",
                 name=name,
                 parent=id_prefix,
-                url=f"{OPENSTREETMAP_FR_EXTRACTS_INDEX_URL}{directory_url}{link['href']}",
+                url=f"{OPENSTREETMAP_FR_EXTRACTS_INDEX_URL}{directory_url}{href}",
                 geometry=polygon,
             )
         )
