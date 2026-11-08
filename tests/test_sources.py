@@ -329,19 +329,34 @@ def test_bbbike_region_gather_and_parse(mocker: MockerFixture) -> None:
     )
 
 
-def test_osm_fr_gather_and_parse(mocker: MockerFixture) -> None:
+@pytest.mark.parametrize(
+    "root_html,europe_html",
+    [
+        # Apache table listing.
+        (
+            "<table>"
+            '<tr><td><a href="?C=N;O=D">Name</a></td></tr>'
+            '<tr><td><a href="/">Parent Directory</a></td></tr>'
+            '<tr><td><img src="/icons/folder.gif"></td>'
+            '<td><a href="europe/">europe/</a></td></tr>'
+            "</table>",
+            "<table><tr><td>"
+            '<a href="monaco-latest.osm.pbf">monaco-latest.osm.pbf</a>'
+            "</td></tr></table>",
+        ),
+        # nginx autoindex listing (long link texts are truncated).
+        (
+            '<pre><a href="../">../</a>\n<a href="europe/">europe/</a>   09-Sep-2026 10:33  -\n'
+            '<a href="europe-latest.osm.pbf.md5">europe-latest.osm.pbf.md5</a></pre>',
+            '<pre><a href="../">../</a>\n'
+            '<a href="monaco-latest.osm.pbf">monaco-latest.osm..&gt;</a>  07-Nov-2026 01:05  4M\n'
+            '<a href="monaco.state.txt">monaco.state.txt</a></pre>',
+        ),
+    ],
+)
+def test_osm_fr_gather_and_parse(mocker: MockerFixture, root_html: str, europe_html: str) -> None:
     """Test if OSM.fr directory pages are enumerated then parsed into extracts."""
     import osmfinder.sources.osm_fr as osm_fr_module
-
-    root_html = (
-        "<table>"
-        '<tr><td><img src="/icons/folder.gif"></td>'
-        '<td><a href="europe/">europe/</a></td></tr>'
-        "</table>"
-    )
-    europe_html = (
-        '<table><tr><td><a href="monaco-latest.osm.pbf">monaco-latest.osm.pbf</a></td></tr></table>'
-    )
 
     def fake_get(url: str, headers: Any = None, timeout: Any = None) -> Any:
         response = mocker.Mock()
