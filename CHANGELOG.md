@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-08
+
 ### Fixed
 
 - OpenStreetMap.fr index loading after the server switched its directory listings to the nginx format.
@@ -93,7 +95,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `find_smallest_containing_extracts`, `find_and_download_extracts_pbf_files`,
   `find_extracts_covering_point`, `display_available_extracts`, `clear_osm_index_cache`.
 
-[Unreleased]: https://github.com/RaczeQ/osmfinder/compare/1.3.0...HEAD
+[Unreleased]: https://github.com/RaczeQ/osmfinder/compare/1.3.1...HEAD
+
+[1.3.1]: https://github.com/RaczeQ/osmfinder/compare/1.3.0...1.3.1
 
 [1.3.0]: https://github.com/RaczeQ/osmfinder/compare/1.2.3...1.3.0
 
