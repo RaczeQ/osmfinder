@@ -127,6 +127,13 @@ def test_search_error_handling(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "Error" in result.output
 
 
+def test_search_missing_query() -> None:
+    """Test search command without a query shows a usage error."""
+    result = runner.invoke(app, ["search"])
+    assert result.exit_code == 2
+    assert "Missing argument" in result.output
+
+
 def test_search_zero_matches(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test search command shows suggestion table on zero matches."""
     from osmfinder._typing import OpenStreetMapExtract
