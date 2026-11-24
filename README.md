@@ -30,6 +30,8 @@ files.
     <a href="https://pypi.org/project/osmfinder" target="_blank"><img alt="PyPI - Downloads" src="https://img.shields.io/pypi/dm/osmfinder"></a>
 </p>
 
+[Documentation](https://raczeq.github.io/osmfinder/) · [Examples](https://raczeq.github.io/osmfinder/examples/quickstart/) · [Command line](https://raczeq.github.io/osmfinder/cli/) · [API reference](https://raczeq.github.io/osmfinder/api/)
+
 > **Logo attribution:** The osmfinder logo uses icons from the [Lucide](https://lucide.dev/) icon set —
 > specifically the **earth** and **square-dashed** icons.
 
