@@ -59,10 +59,11 @@ def write_parquet_index(index: OsmExtractsIndex, file_path: Path) -> None:
             Array.from_numpy(index.file_names),
             Array.from_numpy(index.parents),
             Array.from_numpy(index.areas),
+            Array.from_numpy(index.file_sizes),
             Array.from_numpy(index.urls),
             Array.from_numpy(geometry_wkb),
         ],
-        names=["id", "name", "file_name", "parent", "area", "url", "geometry"],
+        names=["id", "name", "file_name", "parent", "area", "file_size", "url", "geometry"],
     )
 
     geo_metadata = _build_geo_metadata(index)

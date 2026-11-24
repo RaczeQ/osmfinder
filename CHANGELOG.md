@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Documentation website at <https://raczeq.github.io/osmfinder/> with example notebooks: quickstart, covering a geometry and sources.
+- `file_size` of the file to download in extracts indexes and `OpenStreetMapExtract`. Indexes cached by older versions are still read, with unknown sizes.
 
 ### Changed
 
 - Bumped minimal `typer` version to `0.18.0`, since older versions mishandle CLI usage errors with `click>=8.2.0` (traceback instead of an error message, missing required arguments passed as `None`)
-- Extracts selected for a geometry are swapped for other ones when it makes the sum of their areas smaller without losing the coverage, with at least 10% less area for each additional file. Such extracts have a new covering step reason: `smaller_total_area`.
+- Extracts selected for a geometry are swapped for other ones when it makes the total size of files to download smaller without losing the coverage, with at least 10% less to download for each additional file. Areas are used in place of the sizes if those are unknown. Such extracts have a new covering step reason: `smaller_total_size`.
+- `force_single_result` returns the fully covering extract with the smallest file to download instead of the smallest area, if the sizes are known.
 
 ### Fixed
 

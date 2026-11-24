@@ -55,6 +55,7 @@ def test_extracts_to_geodataframe_converts_list() -> None:
         "url",
         "geometry",
         "file_name",
+        "file_size",
     ]
     assert result["id"].tolist() == ["extract-a", "extract-b"]
     assert result["name"].tolist() == ["Extract A", "Extract B"]
@@ -103,6 +104,7 @@ def test_extracts_to_geodataframe_converts_empty_list() -> None:
         "url",
         "geometry",
         "file_name",
+        "file_size",
     ]
     assert result.empty
     assert str(result.crs) == WGS84_CRS
@@ -153,6 +155,7 @@ def test_load_all_indexes_with_fallback_raises_when_all_fail(
     mocker: MockerFixture,
 ) -> None:
     """Test if an error is raised when all sources fail to load."""
+
     def unavailable() -> Any:
         raise ConnectionError("server down")
 

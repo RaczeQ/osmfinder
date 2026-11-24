@@ -48,8 +48,11 @@ from osmfinder.exceptions import (
 )
 
 # Replacing an extract with smaller ones gives more files to download and process.
-# Each additional file has to reduce the total area by this part of it.
-MIN_AREA_REDUCTION_PER_FILE = 0.1
+# Each additional file has to reduce the total size by this part of it.
+MIN_SIZE_REDUCTION_PER_FILE = 0.1
+# Files of the same area from different providers differ in size by about 20%, since some of them
+# drop the metadata. A file smaller than this part of another one inside of it has to be broken.
+BROKEN_FILE_SIZE_RATIO = 0.5
 
 
 def _find_smallest_containing_extracts(
@@ -72,8 +75,8 @@ def _find_smallest_containing_extracts(
     Extracts are selected based on the highest value of the Intersection over Union metric with
     geometry. Some extracts might be discarded because of low IoU metric value leaving some parts
     of the geometry uncovered. At the end, selected extracts are swapped for other ones if it makes
-    the sum of their areas smaller without losing the coverage. Each additional file has to reduce
-    it by at least 10%.
+    the total size of files to download smaller without losing the coverage. Each additional file
+    has to reduce it by at least 10%. Areas are used in place of the sizes if those are unknown.
 
     Args:
         geometry (BaseGeometry): Geometry to be covered.
@@ -182,7 +185,7 @@ def _find_smallest_containing_extracts(
 
     extracts = [
         polygons_index.get_extract_by_index(position)
-        for position in _minimize_total_area(geometry, unique_extracts_ids, polygons_index)
+        for position in _minimize_total_size(geometry, unique_extracts_ids, polygons_index)
     ]
     all_steps.extend(
         _get_swapped_in_step(geometry, extract)
@@ -414,6 +417,8 @@ def _find_single_extract_for_geometry(
             iou = intersection_area / (extract_area + geometry_area - intersection_area)
             partial_candidates.append((int(idx), extract_area, iou))
 
+    costs = _get_extracts_costs(geometry, [x[0] for x in complete_cover_candidates], polygons_index)
+
     selected_idx: int | None = None
     selected_area = 0.0
     selected_iou = 0.0
@@ -430,7 +435,7 @@ def _find_single_extract_for_geometry(
             selected_reason = "single_result"
         elif complete_cover_candidates:
             selected_idx, selected_area, selected_iou = min(
-                complete_cover_candidates, key=lambda x: x[1]
+                complete_cover_candidates, key=lambda x: (costs[x[0]], x[1])
             )
             selected_reason = "complete_cover"
         else:
@@ -441,7 +446,7 @@ def _find_single_extract_for_geometry(
     else:
         if complete_cover_candidates:
             selected_idx, selected_area, selected_iou = min(
-                complete_cover_candidates, key=lambda x: x[1]
+                complete_cover_candidates, key=lambda x: (costs[x[0]], x[1])
             )
             selected_reason = "complete_cover"
         else:
@@ -477,13 +482,13 @@ def _get_extract_by_id(index: OsmExtractsIndex, extract_id: str) -> OpenStreetMa
     return index.get_extract_by_index(int(matching_indices[0]))
 
 
-def _minimize_total_area(
+def _minimize_total_size(
     geometry: BaseGeometry, extracts_ids: Iterable[str], polygons_index: OsmExtractsIndex
 ) -> list[int]:
     """
-    Reduce the total area of a set of extracts, without losing any of its coverage.
+    Reduce the total size of a set of extracts, without losing any of its coverage.
 
-    The total area is a sum over extracts, so their overlaps count multiple times, as they are
+    The total size is a sum over extracts, so their overlaps count multiple times, as they are
     downloaded multiple times. The whole geometry is considered at once, so an extract can be
     swapped for the ones selected for different parts of it.
 
@@ -500,16 +505,46 @@ def _minimize_total_area(
         [_get_geometry_to_cover(part) for part in _flatten_geometry(geometry)], dtype=object
     )
 
-    improved: list[int] | None = _swap_for_single_extracts(parts, selected, polygons_index)
+    if len(selected) < 2:
+        return selected
+
+    costs = _get_extracts_costs(geometry, selected, polygons_index)
+    improved: list[int] | None = _swap_for_single_extracts(parts, selected, polygons_index, costs)
     while improved is not None:
         selected = improved
-        improved = _replace_with_smaller_extracts(parts, selected, polygons_index)
+        improved = _replace_with_smaller_extracts(parts, selected, polygons_index, costs)
 
-    return selected
+    order = np.lexsort((polygons_index.ids[selected], -polygons_index.areas[selected]))
+    return [selected[i] for i in order]
+
+
+def _get_extracts_costs(
+    geometry: BaseGeometry, compared: list[int], polygons_index: OsmExtractsIndex
+) -> np.ndarray:
+    """
+    Get costs of extracts near a geometry, being their file sizes.
+
+    Areas are used if a file size of any of the compared extracts is unknown. Extracts that can't be
+    compared have an infinite cost: broken files, and the ones with an unknown file size or area.
+    """
+    sizes = polygons_index.file_sizes
+    if np.isnan(sizes[compared]).any():
+        areas = polygons_index.areas
+        return np.where(areas > 0, areas, np.inf)
+
+    geometries = polygons_index.geometries
+    nearby = polygons_index.tree.query(geometry)
+    outer, inner = polygons_index.tree.query(geometries[nearby])
+    outer = nearby[outer]
+    is_suspected = sizes[outer] < BROKEN_FILE_SIZE_RATIO * sizes[inner]
+    outer, inner = outer[is_suspected], inner[is_suspected]
+    costs = np.where(sizes > 0, sizes, np.inf)
+    costs[outer[covers(geometries[outer], geometries[inner])]] = np.inf
+    return costs
 
 
 def _replace_with_smaller_extracts(
-    parts: np.ndarray, selected: list[int], polygons_index: OsmExtractsIndex
+    parts: np.ndarray, selected: list[int], polygons_index: OsmExtractsIndex, costs: np.ndarray
 ) -> list[int] | None:
     """
     Replace one of the extracts with a few smaller ones, if it's worth processing more files.
@@ -520,35 +555,34 @@ def _replace_with_smaller_extracts(
     if len(selected) < 2:
         return None
 
-    areas = polygons_index.areas
-    total_area = areas[selected].sum()
-    file_cost = MIN_AREA_REDUCTION_PER_FILE * total_area
+    total_cost = costs[selected].sum()
+    file_cost = MIN_SIZE_REDUCTION_PER_FILE * total_cost
     cells, cells_cover = _split_into_cells(parts, polygons_index.geometries[selected])
     is_covered_once = cells_cover.sum(axis=1) == 1
 
     for i, position in enumerate(selected):
-        # sorted by area, so there is too little to gain from the remaining ones
-        if areas[position] <= file_cost:
+        # sorted by cost, so there is too little to gain from the remaining ones
+        if costs[position] <= file_cost:
             break
 
-        # Smaller extracts can have a larger area than the replaced one, and the additional files
-        # count only a half here, since they can make other extracts redundant.
+        # Smaller extracts can cost more than the replaced one, and the additional files count
+        # only a half here, since they can make other extracts redundant.
         smaller = _fill_with_smallest_extracts(
             unary_union(cells[cells_cover[:, i] & is_covered_once]),
             polygons_index,
+            costs + file_cost / 2,
             excluded=position,
-            file_cost=file_cost / 2,
-            max_cost=2 * areas[position] + file_cost / 2,
+            max_cost=2 * costs[position] + file_cost / 2,
         )
         if smaller is None:
             continue
 
         replaced = _swap_for_single_extracts(
-            parts, [*selected[:i], *selected[i + 1 :], *smaller], polygons_index
+            parts, [*selected[:i], *selected[i + 1 :], *smaller], polygons_index, costs
         )
         additional_files = max(0, len(replaced) - len(selected))
-        area_limit = total_area - additional_files * file_cost
-        if areas[replaced].sum() < area_limit * (1 - 1e-9):
+        cost_limit = total_cost - additional_files * file_cost
+        if costs[replaced].sum() < cost_limit * (1 - 1e-9):
             return replaced
 
     return None
@@ -557,25 +591,18 @@ def _replace_with_smaller_extracts(
 def _fill_with_smallest_extracts(
     geometry: BaseGeometry,
     polygons_index: OsmExtractsIndex,
+    costs: np.ndarray,
     excluded: int,
-    file_cost: float,
     max_cost: float,
 ) -> list[int] | None:
     """
     Cover a geometry by taking extracts with the lowest cost per newly covered area.
 
-    The cost of an extract is its area and the cost of one more file.
-
     Returns:
         list[int] | None: Extracts or None if they can't fit below the maximal total cost.
     """
-    costs = polygons_index.areas + file_cost
     candidates = polygons_index.tree.query(geometry, predicate="intersects")
-    candidates = candidates[
-        (polygons_index.areas[candidates] > 0)
-        & (costs[candidates] < max_cost)
-        & (candidates != excluded)
-    ]
+    candidates = candidates[(costs[candidates] < max_cost) & (candidates != excluded)]
     candidates = candidates[np.lexsort((polygons_index.ids[candidates], costs[candidates]))]
     new_parts = intersection(polygons_index.geometries[candidates], geometry)
     filling: list[int] = []
@@ -602,16 +629,15 @@ def _fill_with_smallest_extracts(
 
 
 def _swap_for_single_extracts(
-    parts: np.ndarray, selected: list[int], polygons_index: OsmExtractsIndex
+    parts: np.ndarray, selected: list[int], polygons_index: OsmExtractsIndex, costs: np.ndarray
 ) -> list[int]:
     """
-    Remove redundant extracts and swap the others for single ones with a smaller area.
+    Remove redundant extracts and swap the others for single ones with a lower cost.
 
     Returns:
-        list[int]: Positions of the extracts in the index, sorted by area descending, then id.
+        list[int]: Positions of the extracts in the index, sorted by cost descending, then id.
     """
-    areas = polygons_index.areas
-    positions = np.lexsort((polygons_index.ids, -areas))
+    positions = np.lexsort((polygons_index.ids, -costs))
     rank = {int(position): i for i, position in enumerate(positions)}
     selected = sorted(set(selected), key=rank.__getitem__)
 
@@ -629,11 +655,8 @@ def _swap_for_single_extracts(
         selected = [position for position in selected if position not in redundant]
 
         candidates = np.unique(polygons_index.tree.query(cells)[1])
-        # an extract with unknown (zero) area would look like a free one
-        candidates = candidates[
-            (areas[candidates] > 0) & (areas[candidates] < areas[selected].sum())
-        ]
-        candidates = candidates[np.lexsort((polygons_index.ids[candidates], areas[candidates]))]
+        candidates = candidates[costs[candidates] < costs[selected].sum()]
+        candidates = candidates[np.lexsort((polygons_index.ids[candidates], costs[candidates]))]
         candidate_indices, cell_indices = STRtree(cells).query(
             polygons_index.geometries[candidates], predicate="covers"
         )
@@ -645,7 +668,7 @@ def _swap_for_single_extracts(
             covered_cells[candidate] = cell_indices[candidate_indices == i]
             counts[covered_cells[candidate]] += 1
             redundant = _remove_redundant(selected, covered_cells, counts)
-            if areas[redundant].sum() > areas[candidate] * (1 + 1e-9):
+            if costs[redundant].sum() > costs[candidate] * (1 + 1e-9):
                 selected = [position for position in selected if position not in redundant]
                 selected = sorted([*selected, candidate], key=rank.__getitem__)
                 improved = True
@@ -660,7 +683,7 @@ def _swap_for_single_extracts(
 def _get_swapped_in_step(
     geometry: BaseGeometry, extract: OpenStreetMapExtract
 ) -> GeometryCoveringStep:
-    """Build a step for an extract swapped in to make the total area smaller."""
+    """Build a step for an extract swapped in to make the total size smaller."""
     intersection_geometry = extract.geometry.intersection(geometry)
     intersection_area = calculate_spherical_area(intersection_geometry)
     union_area = (
@@ -672,7 +695,7 @@ def _get_swapped_in_step(
         extract=extract,
         iou=intersection_area / union_area,
         selected=True,
-        reason="smaller_total_area",
+        reason="smaller_total_size",
         geometry_to_cover=geometry,
         intersection_geometry=intersection_geometry,
     )

@@ -6,14 +6,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, overload
 
+import numpy as np
 import platformdirs
 from dateutil.relativedelta import relativedelta
 from pooch import HTTPDownloader, retrieve
 from pooch import get_logger as get_pooch_logger
 from requests import HTTPError
+from tqdm.contrib.concurrent import thread_map
 
+from osmfinder._compat import FORCE_TERMINAL
 from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS
 from osmfinder._io import read_parquet_index, write_parquet_index
+from osmfinder._network import get_file_size
 from osmfinder._results import OsmfinderResult
 from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.exceptions import (
@@ -30,6 +34,9 @@ LFS_DIRECTORY_URL = "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/pre
 TEST_LFS_DIRECTORY_URL = (
     "https://raw.githubusercontent.com/RaczeQ/osmfinder/main/tests/test_indexes"
 )
+
+# Number of concurrent requests sent to a single provider.
+FILE_SIZE_REQUESTS_WORKERS = 8
 
 _QUICK_REFRESH_SOURCES: set[OsmExtractSource] = set()
 _REGISTERED_INDEX_LOADERS: dict[OsmExtractSource, Callable[..., OsmExtractsIndex]] = {}
@@ -116,6 +123,7 @@ def load_index_decorator(
                     )
 
                 index = function()
+                _fill_missing_file_sizes(index, extract_source)
 
             # Save index to cache
             if force_recalculation or not global_cache_file_path.exists():
@@ -140,6 +148,21 @@ def load_index_decorator(
         return wrapper
 
     return inner
+
+
+def _fill_missing_file_sizes(index: OsmExtractsIndex, extract_source: OsmExtractSource) -> None:
+    """Ask the server for the sizes of files not given by the source."""
+    missing = np.flatnonzero(np.isnan(index.file_sizes))
+    if not len(missing):
+        return
+
+    index.file_sizes[missing] = thread_map(
+        get_file_size,
+        index.urls[missing],
+        desc=f"{extract_source.value} file sizes",
+        max_workers=FILE_SIZE_REQUESTS_WORKERS,
+        disable=FORCE_TERMINAL,
+    )
 
 
 def _get_registered_index(extract_source: OsmExtractSource, **kwargs: Any) -> OsmExtractsIndex:
@@ -243,7 +266,8 @@ def _get_file_creation_date(path: Path) -> datetime:
 def extracts_to_geodataframe(
     extracts: list[OpenStreetMapExtract] | OsmExtractsIndex | OsmfinderResult,
 ) -> "GeoDataFrame":
-    """Convert extracts into a GeoDataFrame with WGS 84 geometries.
+    """
+    Convert extracts into a GeoDataFrame with WGS 84 geometries.
 
     Args:
         extracts (list[OpenStreetMapExtract] | OsmExtractsIndex | OsmfinderResult):
@@ -279,8 +303,6 @@ def extracts_to_geodataframe(
         empty_data: dict[str, list[Any]] = {
             field.name: [] for field in fields(OpenStreetMapExtract)
         }
-        return gpd.GeoDataFrame(data=empty_data, geometry="geometry").set_crs(
-            WGS84_CRS
-        )
+        return gpd.GeoDataFrame(data=empty_data, geometry="geometry").set_crs(WGS84_CRS)
 
     return gpd.GeoDataFrame(data=extract_dicts, geometry="geometry").set_crs(WGS84_CRS)

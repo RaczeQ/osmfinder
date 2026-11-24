@@ -26,6 +26,8 @@ class OpenStreetMapExtract:
     # so a single extract can't know it in isolation. It's filled when the extract
     # is returned from an `OsmExtractsIndex`, not when the object is constructed.
     file_name: str = ""
+    # Size of the file to download in bytes, None if it's unknown.
+    file_size: int | None = None
 
 
 class OsmExtractSource(str, Enum):
@@ -65,8 +67,13 @@ class OsmExtractsIndex:
         names: np.ndarray,
         parents: np.ndarray,
         urls: np.ndarray,
+        file_sizes: np.ndarray | None = None,
     ):
-        arrays = (ids, geometries, areas, file_names, names, parents, urls)
+        # Sizes in bytes, as floats since the unknown ones are NaN.
+        if file_sizes is None:
+            file_sizes = np.full(len(ids), np.nan)
+
+        arrays = (ids, geometries, areas, file_names, names, parents, urls, file_sizes)
         lengths = {len(array) for array in arrays}
         if len(lengths) > 1:
             raise ValueError(
@@ -81,6 +88,7 @@ class OsmExtractsIndex:
         self.names = names
         self.parents = parents
         self.urls = urls
+        self.file_sizes = file_sizes
 
         # Build the tree lazily for faster Shapely operations
         self._tree = None
@@ -106,6 +114,8 @@ class OsmExtractsIndex:
         names = np.array([extract.name for extract in extracts], dtype=object)
         parents = np.array([extract.parent for extract in extracts], dtype=object)
         urls = np.array([extract.url for extract in extracts], dtype=object)
+        # None becomes NaN
+        file_sizes = np.array([extract.file_size for extract in extracts], dtype=float)
 
         # Fix invalid geometries and keep only polygons before computing metrics and persisting.
         geometries = _ensure_valid_geometries(geometries)
@@ -127,6 +137,7 @@ class OsmExtractsIndex:
             names=names[sort_indices],
             parents=parents[sort_indices],
             urls=urls[sort_indices],
+            file_sizes=file_sizes[sort_indices],
         )
 
     @classmethod
@@ -139,6 +150,8 @@ class OsmExtractsIndex:
             names=numpy_dict["name"],
             parents=numpy_dict["parent"],
             urls=numpy_dict["url"],
+            # missing in the indexes saved by older versions
+            file_sizes=numpy_dict.get("file_size"),
         )
 
     @classmethod
@@ -154,6 +167,7 @@ class OsmExtractsIndex:
         combined_names = np.concatenate([idx.names for idx in indexes])
         combined_parents = np.concatenate([idx.parents for idx in indexes])
         combined_urls = np.concatenate([idx.urls for idx in indexes])
+        combined_file_sizes = np.concatenate([idx.file_sizes for idx in indexes])
 
         # 2. Sort by area and id
         # np.lexsort requires reversed order of values (from least to most important)
@@ -169,6 +183,7 @@ class OsmExtractsIndex:
             names=combined_names[sort_indices],
             parents=combined_parents[sort_indices],
             urls=combined_urls[sort_indices],
+            file_sizes=combined_file_sizes[sort_indices],
         )
 
     @property
@@ -180,6 +195,7 @@ class OsmExtractsIndex:
 
     def get_extract_by_index(self, idx: int) -> OpenStreetMapExtract:
         """Returns a single OpenStreetMapExtract object by index."""
+        file_size = self.file_sizes[idx]
         return OpenStreetMapExtract(
             id=str(self.ids[idx]),
             name=str(self.names[idx]),
@@ -187,6 +203,7 @@ class OsmExtractsIndex:
             url=str(self.urls[idx]),
             geometry=self.geometries[idx],
             file_name=str(self.file_names[idx]),
+            file_size=None if np.isnan(file_size) else int(file_size),
         )
 
     def __iter__(self) -> Iterator[OpenStreetMapExtract]:
@@ -208,6 +225,7 @@ class OsmExtractsIndex:
             names=self.names[mask],
             parents=self.parents[mask],
             urls=self.urls[mask],
+            file_sizes=self.file_sizes[mask],
         )
 
     def to_geodataframe(self) -> "gpd.GeoDataFrame":
@@ -227,6 +245,7 @@ class OsmExtractsIndex:
                 "file_name": self.file_names,
                 "parent": self.parents,
                 "area": self.areas,
+                "file_size": self.file_sizes,
                 "url": self.urls,
                 "geometry": self.geometries,
             },

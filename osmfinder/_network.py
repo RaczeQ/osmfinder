@@ -2,6 +2,8 @@ import time
 
 import requests
 
+from osmfinder._constants import OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS, USER_AGENT
+
 _RETRYABLE_EXCEPTIONS = (
     requests.ConnectionError,
     requests.Timeout,
@@ -44,3 +46,19 @@ def get_with_retries(
             if attempt < retries:
                 time.sleep(retry_delay * (2 ** (attempt - 1)))
     raise last_exception  # type: ignore[misc]
+
+
+def get_file_size(url: str) -> float:
+    """Get a size of the file in bytes without downloading it, NaN if it can't be determined."""
+    try:
+        response = requests.head(
+            url,
+            # a compressed response wouldn't have the size of the file
+            headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
+            timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,
+            allow_redirects=True,
+        )
+        response.raise_for_status()
+        return float(response.headers["Content-Length"])
+    except (requests.RequestException, KeyError, ValueError):
+        return float("nan")

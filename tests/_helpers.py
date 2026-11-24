@@ -64,6 +64,7 @@ def _index_from_extracts(records: list[dict[str, Any]]) -> OsmExtractsIndex:
                 parent=record["parent"],
                 url=record.get("url", ""),
                 geometry=record.get("geometry", box(0, 0, 1, 1)),
+                file_size=record.get("file_size"),
             )
             for record in records
         ]

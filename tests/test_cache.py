@@ -101,6 +101,7 @@ def test_generate_index_warning(mocker: MockerFixture) -> None:
                 )
             ],
         )
+        mocker.patch("osmfinder._network.requests.head", side_effect=requests.ConnectionError)
         with pytest.warns(MissingOsmCacheWarning):
             _load_bbbike_index(force_recalculation=True)
 
@@ -135,6 +136,7 @@ def test_fast_sources_skip_missing_cache_warning(
     response.status_code = 200
     response._content = json.dumps({"features": [feature]}).encode()
     request = mocker.patch("osmfinder._network.requests.get", return_value=response)
+    mocker.patch("osmfinder._network.requests.head", side_effect=requests.ConnectionError)
     mocker.patch(
         "osmfinder.extract._get_global_cache_file_path", return_value=tmp_path / "index.parquet"
     )
@@ -144,6 +146,50 @@ def test_fast_sources_skip_missing_cache_warning(
         load_function(force_recalculation=True)
 
     request.assert_called_once()
+
+
+def test_missing_file_sizes_are_requested(tmp_path: Path, mocker: MockerFixture) -> None:
+    """Test if sizes not given by a source are taken from the headers of its files."""
+    headers = {"known": {"Content-Length": "7"}, "no_length": {}, "missing": {}}
+
+    def head(url: str, **kwargs: object) -> requests.Response:
+        if url == "offline":
+            raise requests.ConnectionError
+        response = requests.Response()
+        response.status_code = 404 if url == "missing" else 200
+        response.headers.update(headers[url])
+        return response
+
+    request = mocker.patch("osmfinder._network.requests.head", side_effect=head)
+    cache_path = tmp_path / "index.parquet"
+    mocker.patch("osmfinder.extract._get_global_cache_file_path", return_value=cache_path)
+    mocker.patch(
+        "osmfinder.sources.movisda._iterate_movisda_geojson",
+        return_value=[
+            OpenStreetMapExtract(
+                id=url, name=url, parent="x", url=url, geometry=box(0, 0, 1, 1), file_size=size
+            )
+            for url, size in [
+                ("from_source", 5),
+                ("known", None),
+                ("no_length", None),
+                ("missing", None),
+                ("offline", None),
+            ]
+        ],
+    )
+
+    _load_movisda_grid_index(force_recalculation=True)
+    index = _load_movisda_grid_index()
+
+    assert request.call_count == 4
+    assert {extract.id: extract.file_size for extract in index} == {
+        "from_source": 5,
+        "known": 7,
+        "no_length": None,
+        "missing": None,
+        "offline": None,
+    }
 
 
 def test_old_index_warning(mocker: MockerFixture) -> None:
