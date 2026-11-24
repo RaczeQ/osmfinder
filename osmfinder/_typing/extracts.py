@@ -4,7 +4,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 import numpy as np
-from shapely import STRtree, is_valid, make_valid
+from shapely import GeometryType, STRtree, buffer, get_type_id, is_valid, make_valid
 
 from osmfinder._area_helper import calculate_spherical_area
 
@@ -90,9 +90,10 @@ class OsmExtractsIndex:
         """
         Build a fully-populated index from a list of extracts.
 
-        Areas are calculated, topologically invalid geometries are repaired, full file names
-        are derived from the parent hierarchy, and the index is sorted by area then id
-        (ascending) so that downstream selection picks the smallest-area extract first.
+        Areas are calculated, topologically invalid geometries are repaired and reduced to
+        polygons, full file names are derived from the parent hierarchy, and the index is sorted
+        by area then id (ascending) so that downstream selection picks the smallest-area extract
+        first.
 
         Args:
             extracts (list[OpenStreetMapExtract]): List of extracts to index.
@@ -106,7 +107,7 @@ class OsmExtractsIndex:
         parents = np.array([extract.parent for extract in extracts], dtype=object)
         urls = np.array([extract.url for extract in extracts], dtype=object)
 
-        # Fix topologically invalid geometries before computing metrics and persisting.
+        # Fix invalid geometries and keep only polygons before computing metrics and persisting.
         geometries = _ensure_valid_geometries(geometries)
 
         # Calculate geodetic areas (km²).
@@ -238,17 +239,24 @@ class OsmExtractsIndex:
 
 def _ensure_valid_geometries(geometries: np.ndarray) -> np.ndarray:
     """
-    Fix topologically invalid geometries in an extracts index.
+    Fix topologically invalid geometries in an extracts index and keep only polygons.
 
     Some sources contain invalid geometries (self-intersections, nested shells).
     These would raise ``GEOSException: TopologyException`` during the coverage
-    search (intersection / difference / union).
+    search (intersection / difference / union). Repairing them can leave lines and
+    points next to the polygons, so everything except (multi)polygons is dropped.
     """
-    invalid_geometries_mask = ~is_valid(geometries)
-    if invalid_geometries_mask.any():
-        fixed_geometries = geometries.copy()
-        fixed_geometries[invalid_geometries_mask] = make_valid(geometries[invalid_geometries_mask])
-        return fixed_geometries
+    geometries = geometries.copy()
+
+    invalid_mask = ~is_valid(geometries)
+    geometries[invalid_mask] = make_valid(geometries[invalid_mask])
+
+    # Zero buffer keeps the polygons of a collection and drops its lines and points.
+    other_mask = ~np.isin(
+        get_type_id(geometries), [GeometryType.POLYGON, GeometryType.MULTIPOLYGON]
+    )
+    geometries[other_mask] = buffer(geometries[other_mask], 0)
+
     return geometries
 
 
