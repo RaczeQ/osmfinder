@@ -27,16 +27,21 @@ def calculate_spherical_area(
     Vectorized area (km^2) of WGS84 (lon/lat) shapely Polygon(s), spherical approximation.
 
     Accepts one Polygon or an array-like (list/ndarray/ GeoSeries) of Polygons. Handles holes
-    correctly regardless of ring winding order. MultiPolygons are exploded into individual parts
-    first.
+    correctly regardless of ring winding order. MultiPolygons and (nested) GeometryCollections are
+    exploded into individual parts first.
     """
     is_single = isinstance(geometry, BaseGeometry)
-    geometries = np.atleast_1d(np.asarray(geometry, dtype=object))
+    # Copied, since shapely rejects read-only arrays and pandas returns them for a GeoSeries.
+    geometries = np.atleast_1d(np.array(geometry, dtype=object))
 
     if len(geometries) == 0:
         return 0.0 if is_single else np.array([], dtype=float)
 
     parts, part_idx = shapely.get_parts(geometries, return_index=True)
+    # A single get_parts call doesn't explode collections nested in a GeometryCollection.
+    while (shapely.get_type_id(parts) >= shapely.GeometryType.MULTIPOINT).any():
+        parts, nested_idx = shapely.get_parts(parts, return_index=True)
+        part_idx = part_idx[nested_idx]
 
     if len(parts) == 0:
         return 0.0 if is_single else np.zeros(len(geometries), dtype=float)

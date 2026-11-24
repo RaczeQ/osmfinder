@@ -1,6 +1,6 @@
 """Tests for index building, full name generation and geometry repair."""
 
-from shapely import box, from_wkt, is_valid
+from shapely import GeometryCollection, LineString, MultiPolygon, box, from_wkt, is_valid
 
 from tests._helpers import _index_from_extracts
 
@@ -39,3 +39,33 @@ def test_from_extracts_repairs_invalid_geometries() -> None:
     )
 
     assert is_valid(index.geometries).all()
+
+
+def test_from_extracts_keeps_only_polygons() -> None:
+    """Test if an index contains only polygons and multipolygons."""
+    polygons = MultiPolygon([box(0, 0, 1, 1), box(5, 5, 6, 6)])
+    line = LineString([(9, 8), (9, 9)])
+    geometries = {
+        # make_valid returns a MultiPolygon and a LineString in a collection for this spike
+        "spike": from_wkt(
+            "MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)), ((5 5, 6 5, 6 6, 5 6, 5 5, 5 4, 5 5)))"
+        ),
+        "valid collection": GeometryCollection([polygons, line]),
+        "single polygon": GeometryCollection([box(0, 0, 1, 1), line]),
+        "multipolygon": polygons,
+        "polygon": box(0, 0, 1, 1),
+    }
+    index = _index_from_extracts(
+        [
+            {"id": key, "name": key, "parent": "root", "geometry": geometry}
+            for key, geometry in geometries.items()
+        ]
+    )
+
+    result = dict(zip(index.ids, index.geometries, strict=True))
+    for key in ("spike", "valid collection", "multipolygon"):
+        assert result[key].geom_type == "MultiPolygon"
+        assert result[key].equals(polygons)
+    for key in ("single polygon", "polygon"):
+        assert result[key].geom_type == "Polygon"
+        assert result[key].equals(box(0, 0, 1, 1))
