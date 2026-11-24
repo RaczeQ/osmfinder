@@ -21,6 +21,7 @@ from shapely import (
     covers,
     difference,
     equals_exact,
+    get_parts,
     intersection,
     intersects,
     is_empty,
@@ -359,7 +360,7 @@ def _warn_about_uncovered_geometry(
             for part in _flatten_geometry(geometry)
         ]
     )
-    if is_empty(uncovered_geometry):
+    if _is_sliver(np.array([uncovered_geometry]))[0]:
         return
 
     discarded = sum(step.reason == "low_iou" for step in steps)
@@ -548,7 +549,8 @@ def _replace_with_smaller_extracts(
         )
         additional_files = max(0, len(replaced) - len(selected))
         area_limit = total_area - additional_files * file_cost
-        if areas[replaced].sum() < area_limit * (1 - 1e-9):
+        is_smaller = areas[replaced].sum() < area_limit * (1 - 1e-9)
+        if is_smaller and _are_covered(cells, polygons_index.geometries[replaced]):
             return replaced
 
     return None
@@ -580,7 +582,7 @@ def _fill_with_smallest_extracts(
     new_parts = intersection(polygons_index.geometries[candidates], geometry)
     filling: list[int] = []
 
-    while not _is_sliver(geometry):
+    while not _is_sliver(np.array([geometry]))[0]:
         new_areas = calculate_spherical_area(new_parts)
         is_useful = new_areas > 0
         candidates, new_parts = candidates[is_useful], new_parts[is_useful]
@@ -713,9 +715,25 @@ def _split_into_cells(
     return cells[is_relevant], cells_cover[is_relevant]
 
 
-def _is_sliver(geometry: BaseGeometry | np.ndarray) -> bool | np.ndarray:
-    """Find geometries thinner than a micrometer, being a floating point noise of overlays."""
-    return cast("bool | np.ndarray", planar_area(geometry) <= 1e-11 * length(geometry))
+def _are_covered(cells: np.ndarray, extract_geometries: Iterable[BaseGeometry]) -> bool:
+    """Check if all cells are covered by extracts together."""
+    for extract_geometry in extract_geometries:
+        prepare(extract_geometry)
+        cells = cells[~covers(extract_geometry, cells)]
+        cells = difference(cells, extract_geometry)
+
+    return bool(_is_sliver(cells).all())
+
+
+def _is_sliver(geometries: np.ndarray) -> np.ndarray:
+    """
+    Find geometries thinner than a micrometer, being a floating point noise of overlays.
+
+    Parts are checked separately, since overlays can leave long lines next to a small polygon.
+    """
+    parts, geometries_indices = get_parts(geometries, return_index=True)
+    is_thick = planar_area(parts) > 1e-11 * length(parts)
+    return np.bincount(geometries_indices[is_thick], minlength=len(geometries)) == 0
 
 
 def _remove_redundant(
