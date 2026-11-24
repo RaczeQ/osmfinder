@@ -495,9 +495,7 @@ def _minimize_total_area(
     Returns:
         list[int]: Positions of the extracts in the index, sorted by area descending, then id.
     """
-    selected: list[int] = np.flatnonzero(
-        np.isin(polygons_index.ids, list(extracts_ids))
-    ).tolist()
+    selected: list[int] = np.flatnonzero(np.isin(polygons_index.ids, list(extracts_ids))).tolist()
     parts = np.array(
         [_get_geometry_to_cover(part) for part in _flatten_geometry(geometry)], dtype=object
     )
