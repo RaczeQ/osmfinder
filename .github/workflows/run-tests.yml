@@ -12,4 +12,5 @@ jobs:
   run-tests:
     name: "Run tests job"
     uses: ./.github/workflows/_tests.yml
-    secrets: inherit
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
