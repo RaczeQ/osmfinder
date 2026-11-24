@@ -40,13 +40,13 @@ from osmfinder.finder import (
     find_extracts_covering_point,
 )
 from osmfinder.finder._covering import (
-    MIN_AREA_REDUCTION_PER_FILE,
+    MIN_SIZE_REDUCTION_PER_FILE,
     _find_smallest_containing_extracts_for_single_geometry,
     _flatten_geometry,
     _format_covered_area,
     _get_geometry_to_cover,
     _is_sliver,
-    _minimize_total_area,
+    _minimize_total_size,
 )
 from tests._helpers import _index_from_extracts, _index_from_records
 
@@ -311,7 +311,7 @@ def test_single_extract_replaces_larger_set(mocker: MockerFixture) -> None:
     assert [(step.extract.id, step.reason) for step in result.steps] == [
         ("left", "redundant"),
         ("right", "redundant"),
-        ("both", "smaller_total_area"),
+        ("both", "smaller_total_size"),
     ]
     assert result.steps[-1].cumulative_coverage == pytest.approx(1)
 
@@ -387,6 +387,165 @@ def test_large_extract_is_replaced_by_smaller_ones(
     assert result.uncovered_geometry.is_empty
 
 
+@pytest.mark.parametrize(
+    "sizes,expected",
+    [
+        # larger area, but less to download
+        ({"left": 5, "right": 5, "both": 9}, {"both"}),
+        # smaller area, but more to download
+        ({"left": 5, "right": 5, "both": 11, "tight": 12}, {"left", "right"}),
+        # an extract with unknown size isn't compared with the others
+        ({"left": 5, "right": 5, "both": 11}, {"left", "right"}),
+        # some sizes of the selected extracts are unknown, so areas are compared
+        ({"left": 5, "both": 1, "tight": 12}, {"tight"}),
+        ({}, {"tight"}),
+    ],
+)
+def test_file_size_is_minimized(
+    mocker: MockerFixture, sizes: dict[str, int], expected: set[str]
+) -> None:
+    """Test if the size of files is minimized when it's known, and the area otherwise."""
+    geometries = {
+        "left": box(-2, 0, 1, 2),
+        "right": box(1, 0, 4, 2),
+        "both": box(-2, -4, 4, 4),
+        "tight": box(0, -0.6, 2, 3),
+    }
+    index = _index_from_extracts(
+        [
+            {
+                "id": key,
+                "name": key,
+                "parent": "root",
+                "geometry": geometry,
+                "file_size": sizes.get(key),
+            }
+            for key, geometry in geometries.items()
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    geometry = MultiPolygon([box(0, 0, 0.9, 2), box(1.1, 0, 2, 2)])
+
+    result = find_extracts_by_geometry(geometry, "any")
+
+    assert {extract.id for extract in result.extracts} == expected
+    assert result.uncovered_geometry.is_empty
+
+
+def test_extract_with_unknown_area_is_not_replaced(mocker: MockerFixture) -> None:
+    """Test if a selected extract with a zero area isn't swapped for the whole country."""
+    index = _index_from_records(
+        [
+            {"id": key, "name": key, "parent": "x", "url": "", "geometry": geometry, "area": area}
+            for key, geometry, area in [
+                ("island", box(0, 0, 1, 1), 0),
+                ("land", box(1, 0, 2, 1), 12000),
+                ("country", box(0, 0, 20, 20), 5000000),
+            ]
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(box(0, 0, 2, 1), "any")
+
+    assert {extract.id for extract in result.extracts} == {"island", "land"}
+
+
+@pytest.mark.parametrize(
+    "threshold,expected",
+    [(0, {"large"}), (0.01, {"left", "right"}), (0.001, {"large"}), (1, {"left", "right"})],
+)
+def test_swapped_in_extract_respects_iou_threshold(
+    mocker: MockerFixture, threshold: float, expected: set[str]
+) -> None:
+    """Test if a small file isn't taken when it covers a much larger area than the geometry."""
+    geometries = {
+        "left": box(0, 0, 1, 1),
+        "right": box(1, 0, 2, 1),
+        # about 0.5% of it is inside of the geometry
+        "large": box(-9, -9, 11, 11),
+    }
+    sizes = {"left": 50, "right": 50, "large": 60}
+    index = _index_from_extracts(
+        [
+            {
+                "id": key,
+                "name": key,
+                "parent": "root",
+                "geometry": geometry,
+                "file_size": sizes[key],
+            }
+            for key, geometry in geometries.items()
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(
+        box(0, 0, 2, 1), "any", geometry_coverage_iou_threshold=threshold
+    )
+
+    assert {extract.id for extract in result.extracts} == expected
+
+
+def test_result_order_does_not_depend_on_file_sizes(mocker: MockerFixture) -> None:
+    """Test if extracts are sorted from the largest area, regardless of their file sizes."""
+    index = _index_from_extracts(
+        [
+            {
+                "id": "a",
+                "name": "a",
+                "parent": "x",
+                "geometry": box(0, 0, 1, 1),
+                "file_size": 9,
+            },
+            {
+                "id": "b",
+                "name": "b",
+                "parent": "x",
+                "geometry": box(1, 0, 3, 1),
+                "file_size": 2,
+            },
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(box(0, 0, 3, 1), "any")
+
+    assert [extract.id for extract in result.extracts] == ["b", "a"]
+
+
+@pytest.mark.parametrize(
+    "sizes,expected",
+    [
+        ({"small": 9, "large": 8}, "large"),
+        ({"small": 8, "large": 9}, "small"),
+        ({"large": 8}, "small"),
+    ],
+)
+def test_force_single_result_minimizes_file_size(
+    mocker: MockerFixture, sizes: dict[str, int], expected: str
+) -> None:
+    """Test if the single result is the extract with the smallest file, if sizes are known."""
+    geometries = {"small": box(0, 0, 3, 3), "large": box(0, 0, 10, 10)}
+    index = _index_from_extracts(
+        [
+            {
+                "id": key,
+                "name": key,
+                "parent": "x",
+                "geometry": geometry,
+                "file_size": sizes.get(key),
+            }
+            for key, geometry in geometries.items()
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(box(0, 0, 2, 2), force_single_result=True)
+
+    assert [extract.id for extract in result.extracts] == [expected]
+
+
 def test_required_extract_is_not_removed_with_nested_one(mocker: MockerFixture) -> None:
     """Test if an extract needed by one part stays when it contains an extract of another part."""
     index = _index_from_extracts(
@@ -414,7 +573,7 @@ def test_floating_point_slivers_do_not_require_extra_extracts() -> None:
         ]
     )
 
-    assert len(_minimize_total_area(box(0.5, 0.5, 2, 2), ["a", "b"], index)) == 1
+    assert len(_minimize_total_size(box(0.5, 0.5, 2, 2), ["a", "b"], index)) == 1
 
 
 def test_floating_point_slivers_do_not_warn(mocker: MockerFixture) -> None:
@@ -462,6 +621,7 @@ def test_minimizing_keeps_coverage_and_limits(seed: int) -> None:
                 "name": str(i),
                 "parent": "root",
                 "geometry": unary_union([random_box(5) for _ in range(rng.randint(1, 2))]),
+                "file_size": rng.randint(1, 1000),
             }
             for i in range(rng.randint(5, 25))
         ]
@@ -483,7 +643,11 @@ def test_minimizing_keeps_coverage_and_limits(seed: int) -> None:
         )[0]
     selected = np.flatnonzero(np.isin(index.ids, list(selected_ids)))
 
-    minimized = _minimize_total_area(geometry, selected_ids, index)
+    are_sizes_known = rng.random() < 0.5
+    if not are_sizes_known:
+        index.file_sizes = np.full(len(index), np.nan)
+
+    minimized = _minimize_total_size(geometry, selected_ids, index)
 
     covered = unary_union(index.geometries[selected])
     still_covered = unary_union(index.geometries[minimized])
@@ -492,9 +656,10 @@ def test_minimizing_keeps_coverage_and_limits(seed: int) -> None:
         # much less than a buffered point has
         assert lost.area < 1e-14
 
+    costs = index.file_sizes if are_sizes_known else index.areas
     additional_files = max(0, len(minimized) - len(selected))
-    cost_limit = index.areas[selected].sum() * (1 - MIN_AREA_REDUCTION_PER_FILE) ** additional_files
-    assert index.areas[minimized].sum() <= cost_limit * (1 + 1e-9)
+    cost_limit = costs[selected].sum() * (1 - MIN_SIZE_REDUCTION_PER_FILE) ** additional_files
+    assert costs[minimized].sum() <= cost_limit * (1 + 1e-9)
 
 
 def test_excluded_extracts_ids() -> None:
@@ -851,7 +1016,7 @@ def test_geometry_covering_step_reasons() -> None:
     result = find_extracts_by_geometry(box(9.4, 47.2, 9.8, 47.6), "any")
     assert [extract.id for extract in result.extracts] == ["Movisda-grid_N47W009"]
     reasons = {step.extract.id: (step.selected, step.reason) for step in result.steps}
-    assert reasons.pop("Movisda-grid_N47W009") == (True, "smaller_total_area")
+    assert reasons.pop("Movisda-grid_N47W009") == (True, "smaller_total_size")
     assert len(reasons) == 5
     assert set(reasons.values()) == {(False, "redundant")}
 
@@ -864,8 +1029,8 @@ def test_geometry_covering_step_reasons() -> None:
         "Movisda-admin_LI": (True, "selected"),
         "BBBike_Konstanz": (True, "selected"),
         "Geofabrik_schwaben": (True, "selected"),
-        "Movisda-admin_AT-8": (True, "smaller_total_area"),
-        "GEO2Day_europe_switzerland_saint_gallen": (True, "smaller_total_area"),
+        "Movisda-admin_AT-8": (True, "smaller_total_size"),
+        "GEO2Day_europe_switzerland_saint_gallen": (True, "smaller_total_size"),
     }
 
 

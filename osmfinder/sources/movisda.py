@@ -149,6 +149,7 @@ def _parse_movisda_features(
                 parent=parent,
                 url=f"{pbf_base_url}/{prefix}latest.osm.pbf",
                 geometry=geometry,
+                file_size=properties.get("bytes"),
             )
         )
 

@@ -83,18 +83,15 @@ geometry = box(9.4, 47.2, 10.1, 47.6)
 result = osmfinder.find_extracts_by_geometry(
     geometry, force_single_result=False  # default behaviour
 )
-print(len(result.extracts))     # 5
-print(result.extracts[0].id)    # 'Geofabrik_schwaben'
-print(result.extracts[1].id)    # 'BBBike_Konstanz'
-print(result.extracts[2].id)    # 'Movisda-admin_AT-8'
-print(result.extracts[3].id)    # 'GEO2Day_europe_switzerland_saint_gallen'
-print(result.extracts[4].id)    # 'Movisda-admin_LI'
+print(len(result.extracts))     # 2
+print(result.extracts[0].id)    # 'Movisda-grid_N47W009'
+print(result.extracts[1].id)    # 'Movisda-grid_N47W010'
 
 result = osmfinder.find_extracts_by_geometry(
     geometry, force_single_result=True
 )
 print(len(result.extracts))     # 1
-print(result.extracts[0].id)    # 'BBBike-region_europe_alps'
+print(result.extracts[0].id)    # 'Geofabrik_alps'
 
 # --- explore what's available ---
 osmfinder.display_available_extracts(source="Geofabrik") # source is optional
@@ -199,6 +196,7 @@ Metadata object returned by search and listing operations.
 | `url` | `str` | Download URL for the `.osm.pbf` file |
 | `geometry` | `BaseGeometry` | Boundary polygon of the extract |
 | `file_name` | `str` | Full file name derived from the parent hierarchy |
+| `file_size` | `int \| None` | Size of the file in bytes from the time of building the index, `None` if unknown |
 
 ### `OsmfinderQueryResult`
 
@@ -245,7 +243,7 @@ Record of a single extract considered during geometry covering.
 | `extract` | `OpenStreetMapExtract` | The extract considered |
 | `iou` | `float` | Intersection over Union with the remaining geometry |
 | `selected` | `bool` | Whether the extract was selected |
-| `reason` | `str` | Selection reason (`"first_extract"`, `"selected"`, `"low_iou"`, `"redundant"` or `"smaller_total_area"` for an extract swapped in for others, with the whole geometry instead of the remaining one) |
+| `reason` | `str` | Selection reason (`"first_extract"`, `"selected"`, `"low_iou"`, `"redundant"` or `"smaller_total_size"` for an extract swapped in for others, with the whole geometry instead of the remaining one) |
 | `geometry_to_cover` | `BaseGeometry` | Remaining geometry before this step |
 | `intersection_geometry` | `BaseGeometry` | Intersection of the extract with the remaining geometry |
 | `cumulative_coverage` | `float` | Cumulative coverage of the input geometry up to this step |

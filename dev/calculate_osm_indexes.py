@@ -46,9 +46,12 @@ def _load_all_indexes_with_fallback(
 
     for extract_source in _REGISTERED_INDEX_LOADERS:
         try:
-            index = _get_registered_index(
-                extract_source, force_recalculation=force_recalculation
-            )
+            with warnings.catch_warnings():
+                # Don't publish an index with files that weren't checked against the Movisda grid.
+                warnings.simplefilter("error", OsmExtractSourceUnavailableWarning)
+                index = _get_registered_index(
+                    extract_source, force_recalculation=force_recalculation
+                )
             loaded_indexes.append(index)
             successful_sources.append(extract_source)
         except Exception as ex:
@@ -67,6 +70,7 @@ def _load_all_indexes_with_fallback(
         )
 
     return OsmExtractsIndex.combine_indexes(loaded_indexes), successful_sources
+
 
 if __name__ == "__main__":
     clear_osm_index_cache()

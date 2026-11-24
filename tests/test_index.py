@@ -1,7 +1,12 @@
 """Tests for index building, full name generation and geometry repair."""
 
+from pathlib import Path
+
+import numpy as np
+from arro3.io import read_parquet, write_parquet
 from shapely import GeometryCollection, LineString, MultiPolygon, box, from_wkt, is_valid
 
+from osmfinder._io import read_parquet_index, write_parquet_index
 from tests._helpers import _index_from_extracts
 
 
@@ -69,3 +74,31 @@ def test_from_extracts_keeps_only_polygons() -> None:
     for key in ("single polygon", "polygon"):
         assert result[key].geom_type == "Polygon"
         assert result[key].equals(box(0, 0, 1, 1))
+
+
+def test_file_sizes_are_saved(tmp_path: Path) -> None:
+    """Test if known and unknown file sizes survive saving, loading and filtering an index."""
+    index = _index_from_extracts(
+        [
+            {"id": "large", "name": "x", "parent": "root", "geometry": box(0, 0, 2, 2)},
+            {"id": "small", "name": "x", "parent": "root", "file_size": 5 * 10**9 + 1},
+        ]
+    )
+    file_path = tmp_path / "index.parquet"
+    write_parquet_index(index, file_path)
+
+    loaded_index = read_parquet_index(file_path)
+
+    assert [extract.file_size for extract in loaded_index] == [5 * 10**9 + 1, None]
+    assert [e.file_size for e in loaded_index.filter_by_mask(np.array([False, True]))] == [None]
+    assert loaded_index.to_geodataframe()["file_size"].count() == 1
+
+
+def test_index_without_file_sizes_is_loaded(tmp_path: Path) -> None:
+    """Test if an index saved by an older version is loaded with unknown file sizes."""
+    file_path = tmp_path / "index.parquet"
+    write_parquet_index(_index_from_extracts([{"id": "a", "name": "a", "parent": "x"}]), file_path)
+    table = read_parquet(file_path).read_all()
+    write_parquet(table.select([c for c in table.column_names if c != "file_size"]), file_path)
+
+    assert [extract.file_size for extract in read_parquet_index(file_path)] == [None]

@@ -83,7 +83,7 @@ def test_movisda_grid_parse_features() -> None:
             # 1 degree tile.
             {
                 "type": "Feature",
-                "properties": {"prefix": "N42W001-", "name": "N42W001 (1°)"},
+                "properties": {"prefix": "N42W001-", "name": "N42W001 (1°)", "bytes": 123},
                 "geometry": mapping(box(0, 0, 1, 1)),
             },
             # 10 degree tile: resolution encoded in the code via the `-10` suffix.
@@ -108,7 +108,9 @@ def test_movisda_grid_parse_features() -> None:
         by_id["Movisda-grid_N42W001"].url
         == "https://osm.download.movisda.io/grid/N42W001-latest.osm.pbf"
     )
+    assert by_id["Movisda-grid_N42W001"].file_size == 123
     assert by_id["Movisda-grid_N80E000-10"].name == "N80E000-10"
+    assert by_id["Movisda-grid_N80E000-10"].file_size is None
     assert (
         by_id["Movisda-grid_N80E000-10"].url
         == "https://osm.download.movisda.io/grid/N80E000-10-latest.osm.pbf"
