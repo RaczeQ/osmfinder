@@ -12,7 +12,7 @@ jobs:
     name: Update precalculated OSM indexes
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ secrets.CICD_PAT_TOKEN }}
@@ -21,10 +21,10 @@ jobs:
           git config --local user.name "Kraina CI/CD"
           git config --local user.email "cicd@kraina.ai"
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: actions/cache@v3
+      - uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-dev-${{ hashFiles('**/pylock.toml') }}
@@ -39,7 +39,7 @@ jobs:
       - name: Calculate OSM indexes
         run: uv run dev/calculate_osm_indexes.py
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v8
         with:
           title: "chore: update precalculated osm indexes"
           branch: update-osm-precalculcated-indexes
