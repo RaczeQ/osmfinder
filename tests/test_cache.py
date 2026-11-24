@@ -21,6 +21,7 @@ from osmfinder.exceptions import (
     MissingOsmCacheWarning,
     OldOsmCacheWarning,
     OsmExtractIndexOutdatedWarning,
+    OsmExtractSourceUnavailableWarning,
 )
 from osmfinder.extract import (
     _download_precalculated_index_from_github,
@@ -190,6 +191,83 @@ def test_missing_file_sizes_are_requested(tmp_path: Path, mocker: MockerFixture)
         "missing": None,
         "offline": None,
     }
+
+
+def test_broken_files_are_dropped(tmp_path: Path, mocker: MockerFixture) -> None:
+    """Test if extracts with files many times smaller than Movisda tiles suggest are dropped."""
+    sizes = {"complete": 250, "broken": 10, "unknown": None, "outside": 1}
+    geometries = {"outside": box(50, 0, 51, 1)}
+    mocker.patch(
+        "osmfinder.sources.bbbike._iterate_bbbike_index",
+        return_value=[
+            OpenStreetMapExtract(
+                id=key,
+                name=key,
+                parent="x",
+                url=key,
+                # 300 bytes in one tile and a half of 100 bytes in the other one
+                geometry=geometries.get(key, box(0, 0, 1.5, 1)),
+                file_size=size,
+            )
+            for key, size in sizes.items()
+        ],
+    )
+    tiles = OsmExtractsIndex.from_extracts(
+        [
+            OpenStreetMapExtract(
+                id=key, name=key, parent="x", url=key, geometry=geometry, file_size=size
+            )
+            for key, geometry, size in [
+                ("left", box(0, 0, 1, 1), 300),
+                ("right", box(1, 0, 2, 1), 100),
+                # contains the other tiles
+                ("large-10", box(0, 0, 10, 10), 10**6),
+            ]
+        ]
+    )
+    tiles_without_sizes = tiles.filter_by_mask(np.ones(len(tiles), dtype=bool))
+    tiles_without_sizes.file_sizes = np.full(len(tiles), np.nan)
+
+    def get_tiles(**kwargs: object) -> OsmExtractsIndex:
+        return tiles if kwargs.get("force_recalculation") else tiles_without_sizes
+
+    mocker.patch.dict("osmfinder.extract._index_cache", clear=True)
+    mocker.patch.dict(
+        "osmfinder.extract._REGISTERED_INDEX_LOADERS", {OsmExtractSource.movisda_grid: get_tiles}
+    )
+    mocker.patch("osmfinder._network.requests.head", side_effect=requests.ConnectionError)
+    cache_path = tmp_path / "index.parquet"
+    mocker.patch("osmfinder.extract._get_global_cache_file_path", return_value=cache_path)
+
+    with pytest.warns(UserWarning, match=r"Dropped .*: broken \("):
+        _load_bbbike_index(force_recalculation=True)
+
+    assert set(_load_bbbike_index().ids) == {"complete", "unknown", "outside"}
+
+
+def test_index_is_built_without_movisda(tmp_path: Path, mocker: MockerFixture) -> None:
+    """Test if an index can be built when there is nothing to check its files with."""
+    mocker.patch(
+        "osmfinder.sources.bbbike._iterate_bbbike_index",
+        return_value=[
+            OpenStreetMapExtract(
+                id="a", name="a", parent="x", url="a", geometry=box(0, 0, 1, 1), file_size=1
+            )
+        ],
+    )
+    mocker.patch.dict("osmfinder.extract._index_cache", clear=True)
+    mocker.patch.dict(
+        "osmfinder.extract._REGISTERED_INDEX_LOADERS",
+        {OsmExtractSource.movisda_grid: mocker.Mock(side_effect=requests.ConnectionError)},
+    )
+    mocker.patch(
+        "osmfinder.extract._get_global_cache_file_path", return_value=tmp_path / "index.parquet"
+    )
+
+    with pytest.warns(OsmExtractSourceUnavailableWarning):
+        index = _load_bbbike_index(force_recalculation=True)
+
+    assert index.ids.tolist() == ["a"]
 
 
 def test_old_index_warning(mocker: MockerFixture) -> None:

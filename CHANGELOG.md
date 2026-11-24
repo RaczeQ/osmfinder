@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Extracts required to cover a multipart geometry are no longer removed when they contain an extract selected for another part of it.
+- Extracts with files missing most of the data are dropped when an index is built. Their files have less than 20% of the size expected from the Movisda grid, e.g. 0.1 MB for Kanto from BBBike-region.
 - Extracts indexes contain only `Polygon` and `MultiPolygon` geometries. Repaired geometries could be a `GeometryCollection` with stray lines.
 - Area of extracts with polygons nested in a `GeometryCollection` (e.g. Sicily from Movisda), which was 0 and placed them before smaller extracts in the results.
 - `ValueError` when calculating the area of a `GeoSeries` backed by a read-only array.

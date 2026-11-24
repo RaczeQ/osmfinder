@@ -50,9 +50,6 @@ from osmfinder.exceptions import (
 # Replacing an extract with smaller ones gives more files to download and process.
 # Each additional file has to reduce the total size by this part of it.
 MIN_SIZE_REDUCTION_PER_FILE = 0.1
-# Files of the same area from different providers differ in size by about 20%, since some of them
-# drop the metadata. A file smaller than this part of another one inside of it has to be broken.
-BROKEN_FILE_SIZE_RATIO = 0.5
 
 
 def _find_smallest_containing_extracts(
@@ -417,7 +414,7 @@ def _find_single_extract_for_geometry(
             iou = intersection_area / (extract_area + geometry_area - intersection_area)
             partial_candidates.append((int(idx), extract_area, iou))
 
-    costs = _get_extracts_costs(geometry, [x[0] for x in complete_cover_candidates], polygons_index)
+    costs = _get_extracts_costs([x[0] for x in complete_cover_candidates], polygons_index)
 
     selected_idx: int | None = None
     selected_area = 0.0
@@ -508,7 +505,7 @@ def _minimize_total_size(
     if len(selected) < 2:
         return selected
 
-    costs = _get_extracts_costs(geometry, selected, polygons_index)
+    costs = _get_extracts_costs(selected, polygons_index)
     improved: list[int] | None = _swap_for_single_extracts(parts, selected, polygons_index, costs)
     while improved is not None:
         selected = improved
@@ -518,29 +515,15 @@ def _minimize_total_size(
     return [selected[i] for i in order]
 
 
-def _get_extracts_costs(
-    geometry: BaseGeometry, compared: list[int], polygons_index: OsmExtractsIndex
-) -> np.ndarray:
+def _get_extracts_costs(compared: list[int], polygons_index: OsmExtractsIndex) -> np.ndarray:
     """
-    Get costs of extracts near a geometry, being their file sizes.
+    Get file sizes of extracts, or their areas if a size of any of the compared ones is unknown.
 
-    Areas are used if a file size of any of the compared extracts is unknown. Extracts that can't be
-    compared have an infinite cost: broken files, and the ones with an unknown file size or area.
+    Extracts that can't be compared, since their size or area is unknown, have an infinite cost.
     """
     sizes = polygons_index.file_sizes
-    if np.isnan(sizes[compared]).any():
-        areas = polygons_index.areas
-        return np.where(areas > 0, areas, np.inf)
-
-    geometries = polygons_index.geometries
-    nearby = polygons_index.tree.query(geometry)
-    outer, inner = polygons_index.tree.query(geometries[nearby])
-    outer = nearby[outer]
-    is_suspected = sizes[outer] < BROKEN_FILE_SIZE_RATIO * sizes[inner]
-    outer, inner = outer[is_suspected], inner[is_suspected]
-    costs = np.where(sizes > 0, sizes, np.inf)
-    costs[outer[covers(geometries[outer], geometries[inner])]] = np.inf
-    return costs
+    costs = polygons_index.areas if np.isnan(sizes[compared]).any() else sizes
+    return np.where(costs > 0, costs, np.inf)
 
 
 def _replace_with_smaller_extracts(

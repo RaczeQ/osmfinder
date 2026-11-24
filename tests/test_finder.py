@@ -379,10 +379,6 @@ def test_large_extract_is_replaced_by_smaller_ones(
         # some sizes of the selected extracts are unknown, so areas are compared
         ({"left": 5, "both": 1, "tight": 12}, {"tight"}),
         ({}, {"tight"}),
-        # a file can't be so small, when an extract inside of it is many times larger
-        ({"left": 50, "right": 50, "both": 1, "tight": 90}, {"tight"}),
-        ({"left": 50, "right": 50, "both": 1}, {"left", "right"}),
-        ({"left": 1, "left_inside": 9, "right": 5, "both": 11}, {"both"}),
     ],
 )
 def test_file_size_is_minimized(
@@ -391,7 +387,6 @@ def test_file_size_is_minimized(
     """Test if the size of files is minimized when it's known, and the area otherwise."""
     geometries = {
         "left": box(-2, 0, 1, 2),
-        "left_inside": box(-2, 0, -1, 2),
         "right": box(1, 0, 4, 2),
         "both": box(-2, -4, 4, 4),
         "tight": box(0, -0.6, 2, 3),
@@ -450,8 +445,6 @@ def test_result_order_does_not_depend_on_file_sizes(mocker: MockerFixture) -> No
         ({"small": 9, "large": 8}, "large"),
         ({"small": 8, "large": 9}, "small"),
         ({"large": 8}, "small"),
-        # the file of the large extract is truncated
-        ({"small": 9, "large": 1}, "small"),
     ],
 )
 def test_force_single_result_minimizes_file_size(

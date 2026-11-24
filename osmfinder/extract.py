@@ -12,6 +12,7 @@ from dateutil.relativedelta import relativedelta
 from pooch import HTTPDownloader, retrieve
 from pooch import get_logger as get_pooch_logger
 from requests import HTTPError
+from shapely import area, covers, intersection, prepare
 from tqdm.contrib.concurrent import thread_map
 
 from osmfinder._compat import FORCE_TERMINAL
@@ -25,6 +26,7 @@ from osmfinder.exceptions import (
     OldOsmCacheWarning,
     OsmExtractIndexCorruptedError,
     OsmExtractIndexOutdatedWarning,
+    OsmExtractSourceUnavailableWarning,
 )
 
 if TYPE_CHECKING:
@@ -37,6 +39,9 @@ TEST_LFS_DIRECTORY_URL = (
 
 # Number of concurrent requests sent to a single provider.
 FILE_SIZE_REQUESTS_WORKERS = 8
+# Some providers serve files with almost no data inside of the extract. They have up to 13% of the
+# size expected from the Movisda tiles, while the complete ones have at least 25%.
+MIN_EXPECTED_FILE_SIZE_RATIO = 0.2
 
 _QUICK_REFRESH_SOURCES: set[OsmExtractSource] = set()
 _REGISTERED_INDEX_LOADERS: dict[OsmExtractSource, Callable[..., OsmExtractsIndex]] = {}
@@ -124,6 +129,7 @@ def load_index_decorator(
 
                 index = function()
                 _fill_missing_file_sizes(index, extract_source)
+                index = _drop_broken_files(index, extract_source)
 
             # Save index to cache
             if force_recalculation or not global_cache_file_path.exists():
@@ -163,6 +169,58 @@ def _fill_missing_file_sizes(index: OsmExtractsIndex, extract_source: OsmExtract
         max_workers=FILE_SIZE_REQUESTS_WORKERS,
         disable=FORCE_TERMINAL,
     )
+
+
+def _drop_broken_files(
+    index: OsmExtractsIndex, extract_source: OsmExtractSource
+) -> OsmExtractsIndex:
+    """Drop extracts with files many times smaller than the Movisda tiles of the same area."""
+    movisda_sources = (OsmExtractSource.movisda_admin, OsmExtractSource.movisda_grid)
+    if extract_source in movisda_sources or np.isnan(index.file_sizes).all():
+        return index
+
+    try:
+        tiles = _get_registered_index(OsmExtractSource.movisda_grid)
+        # cached by an older version
+        if np.isnan(tiles.file_sizes).all():
+            tiles = _get_registered_index(OsmExtractSource.movisda_grid, force_recalculation=True)
+    except Exception as ex:
+        warnings.warn(
+            f"Couldn't load the Movisda grid to find broken files of the {extract_source.value}"
+            f" source: {ex}.",
+            OsmExtractSourceUnavailableWarning,
+            stacklevel=0,
+        )
+        return index
+
+    # 10 degree tiles contain the 1 degree ones
+    tiles = tiles.filter_by_mask(np.array([not str(tile).endswith("-10") for tile in tiles.ids]))
+    positions, tile_positions = tiles.tree.query(index.geometries, predicate="intersects")
+    prepare(index.geometries)
+    geometries, tile_geometries = index.geometries[positions], tiles.geometries[tile_positions]
+    tile_parts = np.ones(len(positions))
+    partial = ~covers(geometries, tile_geometries)
+    tile_parts[partial] = area(intersection(geometries[partial], tile_geometries[partial])) / area(
+        tile_geometries[partial]
+    )
+    expected_sizes = np.bincount(
+        positions, weights=tiles.file_sizes[tile_positions] * tile_parts, minlength=len(index)
+    )
+
+    # unknown sizes are never smaller
+    is_broken = index.file_sizes < MIN_EXPECTED_FILE_SIZE_RATIO * expected_sizes
+    if is_broken.any():
+        broken_files = ", ".join(
+            f"{index.ids[i]} ({index.file_sizes[i] / 1e6:.2f} MB,"
+            f" expected {expected_sizes[i] / 1e6:.2f} MB)"
+            for i in np.flatnonzero(is_broken)
+        )
+        warnings.warn(
+            f"Dropped extracts with files missing most of the data: {broken_files}.",
+            stacklevel=0,
+        )
+
+    return index.filter_by_mask(~is_broken)
 
 
 def _get_registered_index(extract_source: OsmExtractSource, **kwargs: Any) -> OsmExtractsIndex:
