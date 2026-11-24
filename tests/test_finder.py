@@ -1,13 +1,25 @@
 """Tests for finding extracts by name, geometry and source resolution."""
 
+import random
 import warnings
 from contextlib import nullcontext as does_not_raise
 from typing import Any
 
+import numpy as np
 import pytest
 from pytest_mock import MockerFixture
 from rq_geo_toolkit.geocode import geocode_to_geometry
-from shapely import MultiPolygon, box, from_wkt
+from shapely import (
+    GeometryCollection,
+    LineString,
+    MultiPoint,
+    MultiPolygon,
+    Point,
+    Polygon,
+    box,
+    from_wkt,
+    unary_union,
+)
 from shapely.geometry import mapping
 
 from osmfinder._typing import OsmExtractSource
@@ -27,7 +39,15 @@ from osmfinder.finder import (
     find_extracts_by_geometry,
     find_extracts_covering_point,
 )
-from osmfinder.finder._covering import _format_covered_area, _minimize_total_size
+from osmfinder.finder._covering import (
+    MIN_SIZE_REDUCTION_PER_FILE,
+    _find_smallest_containing_extracts_for_single_geometry,
+    _flatten_geometry,
+    _format_covered_area,
+    _get_geometry_to_cover,
+    _is_sliver,
+    _minimize_total_size,
+)
 from tests._helpers import _index_from_extracts, _index_from_records
 
 
@@ -412,6 +432,61 @@ def test_file_size_is_minimized(
     assert result.uncovered_geometry.is_empty
 
 
+def test_extract_with_unknown_area_is_not_replaced(mocker: MockerFixture) -> None:
+    """Test if a selected extract with a zero area isn't swapped for the whole country."""
+    index = _index_from_records(
+        [
+            {"id": key, "name": key, "parent": "x", "url": "", "geometry": geometry, "area": area}
+            for key, geometry, area in [
+                ("island", box(0, 0, 1, 1), 0),
+                ("land", box(1, 0, 2, 1), 12000),
+                ("country", box(0, 0, 20, 20), 5000000),
+            ]
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(box(0, 0, 2, 1), "any")
+
+    assert {extract.id for extract in result.extracts} == {"island", "land"}
+
+
+@pytest.mark.parametrize(
+    "threshold,expected",
+    [(0, {"large"}), (0.01, {"left", "right"}), (0.001, {"large"}), (1, {"left", "right"})],
+)
+def test_swapped_in_extract_respects_iou_threshold(
+    mocker: MockerFixture, threshold: float, expected: set[str]
+) -> None:
+    """Test if a small file isn't taken when it covers a much larger area than the geometry."""
+    geometries = {
+        "left": box(0, 0, 1, 1),
+        "right": box(1, 0, 2, 1),
+        # about 0.5% of it is inside of the geometry
+        "large": box(-9, -9, 11, 11),
+    }
+    sizes = {"left": 50, "right": 50, "large": 60}
+    index = _index_from_extracts(
+        [
+            {
+                "id": key,
+                "name": key,
+                "parent": "root",
+                "geometry": geometry,
+                "file_size": sizes[key],
+            }
+            for key, geometry in geometries.items()
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    result = find_extracts_by_geometry(
+        box(0, 0, 2, 1), "any", geometry_coverage_iou_threshold=threshold
+    )
+
+    assert {extract.id for extract in result.extracts} == expected
+
+
 def test_result_order_does_not_depend_on_file_sizes(mocker: MockerFixture) -> None:
     """Test if extracts are sorted from the largest area, regardless of their file sizes."""
     index = _index_from_extracts(
@@ -499,6 +574,92 @@ def test_floating_point_slivers_do_not_require_extra_extracts() -> None:
     )
 
     assert len(_minimize_total_size(box(0.5, 0.5, 2, 2), ["a", "b"], index)) == 1
+
+
+def test_floating_point_slivers_do_not_warn(mocker: MockerFixture) -> None:
+    """Test if a geometry uncovered only by a floating point noise doesn't emit a warning."""
+    index = _index_from_extracts(
+        [{"id": "a", "name": "A", "parent": "root", "geometry": box(0, 0, 1 - 1e-15, 1)}]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", GeometryNotCoveredWarning)
+        find_extracts_by_geometry(box(0, 0, 1, 1), "any", allow_uncovered_geometry=True)
+
+
+def test_small_piece_with_a_leftover_line_is_not_a_sliver() -> None:
+    """Test if zero-area lines, left by overlays next to a polygon, don't hide the polygon."""
+    point = Point(5, 5).buffer(1e-6)
+    noise = box(0, 0, 1, 1e-13)
+
+    is_sliver = _is_sliver(
+        np.array([GeometryCollection([point, LineString([(0, 0), (2, 0)])]), point, noise, Point()])
+    )
+
+    assert is_sliver.tolist() == [False, False, True, True]
+
+
+# the last three lost coverage when leftover lines were counted as a part of slivers
+@pytest.mark.parametrize("seed", [*range(150), 1075, 1767, 1932])
+def test_minimizing_keeps_coverage_and_limits(seed: int) -> None:
+    """Test if swapping extracts never loses coverage and is worth the additional files."""
+    rng = random.Random(seed)
+
+    # Edges of extracts and geometries often overlap, as they do in the Movisda grid.
+    def random_box(max_size: int) -> Polygon:
+        x, y = rng.randint(0, 10), rng.randint(0, 10)
+        return box(x, y, x + rng.randint(1, max_size), y + rng.randint(1, max_size))
+
+    def random_points(count: int) -> list[tuple[int, int]]:
+        return [(rng.randint(0, 12), rng.randint(0, 12)) for _ in range(count)]
+
+    index = _index_from_extracts(
+        [
+            {
+                "id": str(i),
+                "name": str(i),
+                "parent": "root",
+                "geometry": unary_union([random_box(5) for _ in range(rng.randint(1, 2))]),
+                "file_size": rng.randint(1, 1000),
+            }
+            for i in range(rng.randint(5, 25))
+        ]
+    )
+    geometry = rng.choice(
+        [
+            random_box(6),
+            MultiPolygon([box(i, rng.randint(0, 8), i + 2.1, 9) for i in (0, 3, 6)]),
+            MultiPoint(random_points(5)),
+            LineString(random_points(4)),
+            GeometryCollection([random_box(5), *map(Point, random_points(3))]),
+        ]
+    )
+    parts = [_get_geometry_to_cover(part) for part in _flatten_geometry(geometry)]
+    selected_ids: set[str] = set()
+    for part in _flatten_geometry(geometry):
+        selected_ids |= _find_smallest_containing_extracts_for_single_geometry(
+            part, index, geometry_coverage_iou_threshold=0, allow_uncovered_geometry=True
+        )[0]
+    selected = np.flatnonzero(np.isin(index.ids, list(selected_ids)))
+
+    are_sizes_known = rng.random() < 0.5
+    if not are_sizes_known:
+        index.file_sizes = np.full(len(index), np.nan)
+
+    minimized = _minimize_total_size(geometry, selected_ids, index)
+
+    covered = unary_union(index.geometries[selected])
+    still_covered = unary_union(index.geometries[minimized])
+    for part in parts:
+        lost = part.intersection(covered).difference(still_covered)
+        # much less than a buffered point has
+        assert lost.area < 1e-14
+
+    costs = index.file_sizes if are_sizes_known else index.areas
+    additional_files = max(0, len(minimized) - len(selected))
+    cost_limit = costs[selected].sum() * (1 - MIN_SIZE_REDUCTION_PER_FILE) ** additional_files
+    assert costs[minimized].sum() <= cost_limit * (1 + 1e-9)
 
 
 def test_excluded_extracts_ids() -> None:

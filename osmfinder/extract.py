@@ -170,6 +170,14 @@ def _fill_missing_file_sizes(index: OsmExtractsIndex, extract_source: OsmExtract
         disable=FORCE_TERMINAL,
     )
 
+    unknown = np.count_nonzero(np.isnan(index.file_sizes))
+    if unknown:
+        warnings.warn(
+            f"Couldn't get the sizes of {unknown} out of {len(index)} files of the"
+            f" {extract_source.value} source.",
+            stacklevel=0,
+        )
+
 
 def _drop_broken_files(
     index: OsmExtractsIndex, extract_source: OsmExtractSource
@@ -184,6 +192,8 @@ def _drop_broken_files(
         # cached by an older version
         if np.isnan(tiles.file_sizes).all():
             tiles = _get_registered_index(OsmExtractSource.movisda_grid, force_recalculation=True)
+        if np.isnan(tiles.file_sizes).all():
+            raise ValueError("sizes of its files are unknown")
     except Exception as ex:
         warnings.warn(
             f"Couldn't load the Movisda grid to find broken files of the {extract_source.value}"
@@ -203,9 +213,9 @@ def _drop_broken_files(
     tile_parts[partial] = area(intersection(geometries[partial], tile_geometries[partial])) / area(
         tile_geometries[partial]
     )
-    expected_sizes = np.bincount(
-        positions, weights=tiles.file_sizes[tile_positions] * tile_parts, minlength=len(index)
-    )
+    # without the tiles of unknown sizes, less is expected
+    tile_sizes = np.nan_to_num(tiles.file_sizes)[tile_positions]
+    expected_sizes = np.bincount(positions, weights=tile_sizes * tile_parts, minlength=len(index))
 
     # unknown sizes are never smaller
     is_broken = index.file_sizes < MIN_EXPECTED_FILE_SIZE_RATIO * expected_sizes

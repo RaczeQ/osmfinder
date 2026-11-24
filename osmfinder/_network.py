@@ -48,17 +48,33 @@ def get_with_retries(
     raise last_exception  # type: ignore[misc]
 
 
-def get_file_size(url: str) -> float:
-    """Get a size of the file in bytes without downloading it, NaN if it can't be determined."""
-    try:
-        response = requests.head(
-            url,
-            # a compressed response wouldn't have the size of the file
-            headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
-            timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,
-            allow_redirects=True,
-        )
-        response.raise_for_status()
-        return float(response.headers["Content-Length"])
-    except (requests.RequestException, KeyError, ValueError):
-        return float("nan")
+def get_file_size(url: str, retries: int = 3) -> float:
+    """
+    Get a size of the file in bytes without downloading it.
+
+    Args:
+        url: URL of the file.
+        retries: Maximum number of attempts in case of temporary errors (default 3).
+
+    Returns:
+        float: Size of the file, NaN if it can't be determined.
+    """
+    for attempt in range(retries):
+        time.sleep(2**attempt - 1)
+        try:
+            response = requests.head(
+                url,
+                # a compressed response wouldn't have the size of the file
+                headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
+                timeout=OSM_EXTRACTS_REQUEST_TIMEOUT_SECONDS,
+                allow_redirects=True,
+            )
+        except _RETRYABLE_EXCEPTIONS:
+            continue
+        if response.status_code == 429 or response.status_code >= 500:
+            continue
+
+        size = response.headers.get("Content-Length", "")
+        return float(size) if response.ok and size.isdigit() else float("nan")
+
+    return float("nan")

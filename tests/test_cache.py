@@ -16,6 +16,7 @@ from shapely import box, to_wkb
 from shapely.geometry import mapping
 
 from osmfinder._io import write_parquet_index
+from osmfinder._network import get_file_size
 from osmfinder._typing import OpenStreetMapExtract, OsmExtractsIndex, OsmExtractSource
 from osmfinder.exceptions import (
     MissingOsmCacheWarning,
@@ -102,7 +103,7 @@ def test_generate_index_warning(mocker: MockerFixture) -> None:
                 )
             ],
         )
-        mocker.patch("osmfinder._network.requests.head", side_effect=requests.ConnectionError)
+        mocker.patch("osmfinder.extract.get_file_size", return_value=np.nan)
         with pytest.warns(MissingOsmCacheWarning):
             _load_bbbike_index(force_recalculation=True)
 
@@ -137,7 +138,7 @@ def test_fast_sources_skip_missing_cache_warning(
     response.status_code = 200
     response._content = json.dumps({"features": [feature]}).encode()
     request = mocker.patch("osmfinder._network.requests.get", return_value=response)
-    mocker.patch("osmfinder._network.requests.head", side_effect=requests.ConnectionError)
+    mocker.patch("osmfinder.extract.get_file_size", return_value=np.nan)
     mocker.patch(
         "osmfinder.extract._get_global_cache_file_path", return_value=tmp_path / "index.parquet"
     )
@@ -180,10 +181,14 @@ def test_missing_file_sizes_are_requested(tmp_path: Path, mocker: MockerFixture)
         ],
     )
 
-    _load_movisda_grid_index(force_recalculation=True)
+    mocker.patch("osmfinder._network.time.sleep")
+
+    with pytest.warns(UserWarning, match="sizes of 3 out of 5 files"):
+        _load_movisda_grid_index(force_recalculation=True)
     index = _load_movisda_grid_index()
 
-    assert request.call_count == 4
+    # the offline one is tried 3 times
+    assert request.call_count == 6
     assert {extract.id: extract.file_size for extract in index} == {
         "from_source": 5,
         "known": 7,
@@ -191,6 +196,36 @@ def test_missing_file_sizes_are_requested(tmp_path: Path, mocker: MockerFixture)
         "missing": None,
         "offline": None,
     }
+
+
+def test_file_size_request_is_retried(mocker: MockerFixture) -> None:
+    """Test if a size is requested again after temporary errors, but not for a missing file."""
+    mocker.patch("osmfinder._network.time.sleep")
+
+    def responses(*statuses: int | Exception) -> list[requests.Response | Exception]:
+        result: list[requests.Response | Exception] = []
+        for status in statuses:
+            if isinstance(status, Exception):
+                result.append(status)
+                continue
+            response = requests.Response()
+            response.status_code = status
+            response.headers["Content-Length"] = "7"
+            result.append(response)
+        return result
+
+    head = mocker.patch(
+        "osmfinder._network.requests.head", side_effect=responses(429, requests.Timeout(), 200)
+    )
+    assert get_file_size("url") == 7
+    assert head.call_count == 3
+
+    head = mocker.patch("osmfinder._network.requests.head", side_effect=responses(404))
+    assert np.isnan(get_file_size("url"))
+
+    head = mocker.patch("osmfinder._network.requests.head", side_effect=responses(503, 503, 503))
+    assert np.isnan(get_file_size("url"))
+    assert head.call_count == 3
 
 
 def test_broken_files_are_dropped(tmp_path: Path, mocker: MockerFixture) -> None:
@@ -235,7 +270,7 @@ def test_broken_files_are_dropped(tmp_path: Path, mocker: MockerFixture) -> None
     mocker.patch.dict(
         "osmfinder.extract._REGISTERED_INDEX_LOADERS", {OsmExtractSource.movisda_grid: get_tiles}
     )
-    mocker.patch("osmfinder._network.requests.head", side_effect=requests.ConnectionError)
+    mocker.patch("osmfinder.extract.get_file_size", return_value=np.nan)
     cache_path = tmp_path / "index.parquet"
     mocker.patch("osmfinder.extract._get_global_cache_file_path", return_value=cache_path)
 
@@ -245,7 +280,10 @@ def test_broken_files_are_dropped(tmp_path: Path, mocker: MockerFixture) -> None
     assert set(_load_bbbike_index().ids) == {"complete", "unknown", "outside"}
 
 
-def test_index_is_built_without_movisda(tmp_path: Path, mocker: MockerFixture) -> None:
+@pytest.mark.parametrize("is_available", [False, True], ids=["unavailable", "without sizes"])
+def test_index_is_built_without_movisda(
+    tmp_path: Path, mocker: MockerFixture, fake_index: OsmExtractsIndex, is_available: bool
+) -> None:
     """Test if an index can be built when there is nothing to check its files with."""
     mocker.patch(
         "osmfinder.sources.bbbike._iterate_bbbike_index",
@@ -258,7 +296,11 @@ def test_index_is_built_without_movisda(tmp_path: Path, mocker: MockerFixture) -
     mocker.patch.dict("osmfinder.extract._index_cache", clear=True)
     mocker.patch.dict(
         "osmfinder.extract._REGISTERED_INDEX_LOADERS",
-        {OsmExtractSource.movisda_grid: mocker.Mock(side_effect=requests.ConnectionError)},
+        {
+            OsmExtractSource.movisda_grid: mocker.Mock(
+                return_value=fake_index, side_effect=None if is_available else requests.Timeout
+            )
+        },
     )
     mocker.patch(
         "osmfinder.extract._get_global_cache_file_path", return_value=tmp_path / "index.parquet"
