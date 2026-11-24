@@ -27,7 +27,7 @@ from osmfinder.finder import (
     find_extracts_by_geometry,
     find_extracts_covering_point,
 )
-from osmfinder.finder._covering import _format_covered_area
+from osmfinder.finder._covering import _format_covered_area, _minimize_total_area
 from tests._helpers import _index_from_extracts, _index_from_records
 
 
@@ -269,6 +269,132 @@ def test_uncovered_geometry_warning_ignores_area_outside_of_geometry(
 
     with pytest.warns(GeometryNotCoveredWarning, match=r" \(covered 50\.00% area\)\.$"):
         find_extracts_by_geometry(box(0, 0, 2, 1), "any", allow_uncovered_geometry=True)
+
+
+def test_single_extract_replaces_larger_set(mocker: MockerFixture) -> None:
+    """Test if extracts are swapped for another one when there is less area to download."""
+    index = _index_from_extracts(
+        [
+            {"id": "left", "name": "Left", "parent": "root", "geometry": box(-2, 0, 1, 2)},
+            {"id": "right", "name": "Right", "parent": "root", "geometry": box(1, 0, 4, 2)},
+            {"id": "both", "name": "Both", "parent": "root", "geometry": box(0, -1.2, 2, 4)},
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    # every part alone fits best to its own extract
+    geometry = MultiPolygon([box(0, 0, 0.9, 2), box(1.1, 0, 2, 2)])
+
+    result = find_extracts_by_geometry(geometry, "any")
+
+    assert [extract.id for extract in result.extracts] == ["both"]
+    assert result.uncovered_geometry.is_empty
+    assert [(step.extract.id, step.reason) for step in result.steps] == [
+        ("left", "redundant"),
+        ("right", "redundant"),
+        ("both", "smaller_total_area"),
+    ]
+    assert result.steps[-1].cumulative_coverage == pytest.approx(1)
+
+
+def test_larger_single_extract_does_not_replace_set(mocker: MockerFixture) -> None:
+    """Test if extracts stay when another one covers the geometry with more area."""
+    index = _index_from_extracts(
+        [
+            {"id": "left", "name": "Left", "parent": "root", "geometry": box(-2, 0, 1, 2)},
+            {"id": "right", "name": "Right", "parent": "root", "geometry": box(1, 0, 4, 2)},
+            {"id": "both", "name": "Both", "parent": "root", "geometry": box(0, -4, 2, 4)},
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    geometry = MultiPolygon([box(0, 0, 0.9, 2), box(1.1, 0, 2, 2)])
+
+    result = find_extracts_by_geometry(geometry, "any")
+
+    assert {extract.id for extract in result.extracts} == {"left", "right"}
+
+
+def test_overlap_of_extracts_counts_twice(mocker: MockerFixture) -> None:
+    """Test if the area is summed over extracts, as the overlap is downloaded in each of them."""
+    index = _index_from_extracts(
+        [
+            {"id": "left", "name": "Left", "parent": "root", "geometry": box(0, 0, 3, 2)},
+            {"id": "right", "name": "Right", "parent": "root", "geometry": box(1, 0, 4, 2)},
+            # more than the union of the above (8), but less than their sum (12)
+            {"id": "both", "name": "Both", "parent": "root", "geometry": box(0, 0, 4, 2.5)},
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    geometry = MultiPolygon([box(0, 0, 0.9, 2), box(3.1, 0, 4, 2)])
+
+    result = find_extracts_by_geometry(geometry, "any")
+
+    assert [extract.id for extract in result.extracts] == ["both"]
+
+
+@pytest.mark.parametrize(
+    "small_extracts,large_height,is_replaced",
+    [
+        (2, 1.7, True),  # 4.4 -> 3.0 (-32%) for 1 more file
+        (2, 1.15, False),  # 3.3 -> 3.0 (-9%) for 1 more file
+        (4, 1.7, True),  # 7.8 -> 5.0 (-36%) for 3 more files
+        (4, 1.4, False),  # 6.6 -> 5.0 (-24%) for 3 more files
+    ],
+)
+def test_large_extract_is_replaced_by_smaller_ones(
+    mocker: MockerFixture, small_extracts: int, large_height: float, is_replaced: bool
+) -> None:
+    """Test if every additional file has to reduce the total area by at least 10%."""
+    small = [
+        {"id": f"small_{i}", "name": "Small", "parent": "root", "geometry": box(i, 0, i + 1, 1)}
+        for i in range(small_extracts)
+    ]
+    large = box(0, 0, small_extracts, large_height)
+    other = box(10, 0, 11, 1)
+    index = _index_from_extracts(
+        [
+            *small,
+            {"id": "large", "name": "Large", "parent": "root", "geometry": large},
+            {"id": "other", "name": "Other", "parent": "root", "geometry": other},
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    geometry = MultiPolygon([box(0, 0, small_extracts, 1), other])
+
+    result = find_extracts_by_geometry(geometry, "any")
+
+    expected = {record["id"] for record in small} if is_replaced else {"large"}
+    assert {extract.id for extract in result.extracts} == {*expected, "other"}
+    assert result.uncovered_geometry.is_empty
+
+
+def test_required_extract_is_not_removed_with_nested_one(mocker: MockerFixture) -> None:
+    """Test if an extract needed by one part stays when it contains an extract of another part."""
+    index = _index_from_extracts(
+        [
+            {"id": "large", "name": "Large", "parent": "root", "geometry": box(0, 0, 10, 10)},
+            {"id": "nested", "name": "Nested", "parent": "root", "geometry": box(9, 0, 10, 1)},
+            {"id": "next", "name": "Next", "parent": "root", "geometry": box(10, 0, 10.9, 0.9)},
+        ]
+    )
+    mocker.patch("osmfinder.finder._get_index_for_sources", return_value=index)
+    geometry = MultiPolygon([box(0, 1, 9, 10), box(8, 0, 10.9, 0.9)])
+
+    result = find_extracts_by_geometry(geometry, "any")
+
+    assert [extract.id for extract in result.extracts] == ["large", "next"]
+    assert result.uncovered_geometry.is_empty
+
+
+def test_floating_point_slivers_do_not_require_extra_extracts() -> None:
+    """Test if only one of two extracts differing by a floating point noise is kept."""
+    index = _index_from_extracts(
+        [
+            {"id": "a", "name": "A", "parent": "root", "geometry": box(0, 0, 1 + 4e-16, 1)},
+            {"id": "b", "name": "B", "parent": "root", "geometry": box(0, 0, 1, 1 + 4e-16)},
+        ]
+    )
+
+    assert len(_minimize_total_area(box(0.5, 0.5, 2, 2), ["a", "b"], index)) == 1
 
 
 def test_excluded_extracts_ids() -> None:
@@ -621,17 +747,26 @@ def test_multiple_smallest_extracts(
 
 def test_geometry_covering_step_reasons() -> None:
     """Test if GeometryCoveringStep reasons are set correctly for all states."""
-    geometry = from_wkt("POLYGON ((9.8 47.2, 9.8 47.6, 9.4 47.6, 9.4 47.2, 9.8 47.2))")
-    result = find_extracts_by_geometry(geometry, "any")
-    assert len(result.extracts) == 4
-    assert len(result.steps) == 5
-
+    # everything is swapped for one extract with a smaller area
+    result = find_extracts_by_geometry(box(9.4, 47.2, 9.8, 47.6), "any")
+    assert [extract.id for extract in result.extracts] == ["Movisda-grid_N47W009"]
     reasons = {step.extract.id: (step.selected, step.reason) for step in result.steps}
-    assert reasons["osmfr_europe_austria_vorarlberg"] == (True, "first_extract")
-    assert reasons["osmfr_europe_switzerland_saint_gallen"] == (True, "selected")
-    assert reasons["Movisda-admin_LI"] == (True, "selected")
-    assert reasons["GEO2Day_europe_switzerland_thurgau"] == (False, "redundant")
-    assert reasons["BBBike_Konstanz"] == (True, "selected")
+    assert reasons.pop("Movisda-grid_N47W009") == (True, "smaller_total_area")
+    assert len(reasons) == 5
+    assert set(reasons.values()) == {(False, "redundant")}
+
+    # only a part of the extracts is swapped
+    result = find_extracts_by_geometry(box(9.4, 47.2, 10.1, 47.6), "any")
+    reasons = {step.extract.id: (step.selected, step.reason) for step in result.steps}
+    assert reasons == {
+        "osmfr_europe_austria_vorarlberg": (False, "redundant"),
+        "osmfr_europe_switzerland_saint_gallen": (False, "redundant"),
+        "Movisda-admin_LI": (True, "selected"),
+        "BBBike_Konstanz": (True, "selected"),
+        "Geofabrik_schwaben": (True, "selected"),
+        "Movisda-admin_AT-8": (True, "smaller_total_area"),
+        "GEO2Day_europe_switzerland_saint_gallen": (True, "smaller_total_area"),
+    }
 
 
 def test_geometry_covering_step_low_iou() -> None:
