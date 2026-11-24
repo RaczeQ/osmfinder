@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Documentation website at <https://raczeq.github.io/osmfinder/> with example notebooks: quickstart, covering a geometry and sources.
+
 ### Changed
 
 - Bumped minimal `typer` version to `0.18.0`, since older versions mishandle CLI usage errors with `click>=8.2.0` (traceback instead of an error message, missing required arguments passed as `None`)
