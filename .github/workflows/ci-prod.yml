@@ -29,3 +29,15 @@ jobs:
         run: uv build
       - name: Publish distribution 📦 to PyPI
         run: uv publish --verbose
+
+  docs:
+    name: Start the build of docs 📚
+    needs: [build-n-publish]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: gh workflow run docs.yml --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Documentation website at <https://raczeq.github.io/osmfinder/> with example notebooks: quickstart, covering a geometry and sources.
+
 ## [1.3.1] - 2026-11-08
 
 ### Fixed

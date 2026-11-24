@@ -1,0 +1,9 @@
+nav:
+  - Home: index.md
+  - Examples:
+      - Quickstart: examples/quickstart.md
+      - Covering a geometry: examples/covering.md
+      - Sources: examples/sources.md
+  - Command line: cli.md
+  - API reference: api.md
+  - Changelog: changelog.md
