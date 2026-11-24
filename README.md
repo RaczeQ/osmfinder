@@ -79,21 +79,22 @@ print(len(extracts))            # number of extracts covering central London
 print(extracts[0].id)           # 'Geofabrik_greater-london'
 
 # --- force single extract ---
-geometry = box(9.4, 47.2, 9.8, 47.6)
+geometry = box(9.4, 47.2, 10.1, 47.6)
 result = osmfinder.find_extracts_by_geometry(
     geometry, force_single_result=False  # default behaviour
 )
-print(len(result.extracts))     # 4
-print(result.extracts[0].id)    # 'GEO2Day_europe_austria_vorarlberg'
+print(len(result.extracts))     # 5
+print(result.extracts[0].id)    # 'Geofabrik_schwaben'
 print(result.extracts[1].id)    # 'BBBike_Konstanz'
-print(result.extracts[2].id)    # 'GEO2Day_europe_switzerland_saint_gallen'
-print(result.extracts[3].id)    # 'Movisda-admin_LI'
+print(result.extracts[2].id)    # 'Movisda-admin_AT-8'
+print(result.extracts[3].id)    # 'GEO2Day_europe_switzerland_saint_gallen'
+print(result.extracts[4].id)    # 'Movisda-admin_LI'
 
 result = osmfinder.find_extracts_by_geometry(
     geometry, force_single_result=True
 )
 print(len(result.extracts))     # 1
-print(result.extracts[0].id)    # 'Movisda-grid_N47W009'
+print(result.extracts[0].id)    # 'BBBike-region_europe_alps'
 
 # --- explore what's available ---
 osmfinder.display_available_extracts(source="Geofabrik") # source is optional
@@ -134,16 +135,17 @@ osmfinder covers --dry-run --wkt "POLYGON ((9.8 47.2, 9.8 47.6, 9.4 47.6, 9.4 47
 ┃    ┃                                  ┃            ┃            ┃        ┃       Cum. ┃          ┃           ┃
 ┃ #  ┃ ID                               ┃ Name       ┃ Area (km²) ┃    IoU ┃   Coverage ┃ Status   ┃ Reason    ┃
 ┡━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━┩
-│ 1  │ GEO2Day_europe...tria_vorarlberg │ vorarlberg │    2748.28 │ 0.1820 │      46.9% │ selected │ first_ex… │
-│ 2  │ GEO2Day_europe...nd_saint_gallen │ saint_gal… │    2565.17 │ 0.1797 │      84.1% │ selected │ selected  │
-│ 3  │ Movisda-admin_LI                 │ Liechtens… │     159.04 │ 0.0624 │      85.7% │ selected │ selected  │
-│ 4  │ GEO2Day_europe...zerland_thurgau │ thurgau    │    1092.62 │ 0.0462 │      85.7% │ rejected │ redundant │
-│ 5  │ BBBike_Konstanz                  │ Konstanz   │    4471.33 │ 0.0302 │     100.0% │ selected │ selected  │
+│ 1  │ osmfr_europe_austria_vorarlberg  │ vorarlberg │    2742.39 │ 0.1824 │       0.0% │ rejected │ redundant │
+│ 2  │ osmfr_europe_s...nd_saint_gallen │ saint_gal… │    2564.19 │ 0.1809 │       0.0% │ rejected │ redundant │
+│ 3  │ Movisda-admin_LI                 │ Liechtens… │     158.60 │ 0.0631 │       0.0% │ rejected │ redundant │
+│ 4  │ GEO2Day_europe...zerland_thurgau │ thurgau    │    1089.48 │ 0.0464 │       0.0% │ rejected │ redundant │
+│ 5  │ BBBike_Konstanz                  │ Konstanz   │    4458.74 │ 0.0291 │       0.0% │ rejected │ redundant │
+│ 6  │ Movisda-grid_N47W009             │ N47W009    │    8353.12 │ 0.1603 │     100.0% │ selected │ smaller_… │
 └────┴──────────────────────────────────┴────────────┴────────────┴────────┴────────────┴──────────┴───────────┘
 ╭────────────────────────────────────────────────── Summary ───────────────────────────────────────────────────╮
 │ Coverage: 100.0%                                                                                             │
 │ IoU threshold: 0.01                                                                                          │
-│ Sources used: BBBike, GEO2Day, Geofabrik, Movisda-admin, Movisda-grid, osmfr                                 │
+│ Sources used: BBBike, BBBike-region, GEO2Day, Geofabrik, Movisda-admin, Movisda-grid, osmfr                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
 # Find extracts from a GeoJSON file
@@ -243,7 +245,7 @@ Record of a single extract considered during geometry covering.
 | `extract` | `OpenStreetMapExtract` | The extract considered |
 | `iou` | `float` | Intersection over Union with the remaining geometry |
 | `selected` | `bool` | Whether the extract was selected |
-| `reason` | `str` | Selection reason (`"first_extract"`, `"selected"`, `"low_iou"` or `"redundant"`) |
+| `reason` | `str` | Selection reason (`"first_extract"`, `"selected"`, `"low_iou"`, `"redundant"` or `"smaller_total_area"` for an extract swapped in for others, with the whole geometry instead of the remaining one) |
 | `geometry_to_cover` | `BaseGeometry` | Remaining geometry before this step |
 | `intersection_geometry` | `BaseGeometry` | Intersection of the extract with the remaining geometry |
 | `cumulative_coverage` | `float` | Cumulative coverage of the input geometry up to this step |
